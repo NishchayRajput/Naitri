@@ -11,6 +11,7 @@ type Config struct {
 	Port      string
 	Env       string
 	JWTSecret string
+	MongoURI  string
 }
 
 func LoadConfig() *Config {
@@ -35,10 +36,16 @@ func LoadConfig() *Config {
 		log.Fatal("JWTSecret environment variable is required")
 	}
 
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		log.Fatal("MongoURI not present")
+	}
+
 	return &Config{
 		Port:      port,
 		Env:       env,
 		JWTSecret: jwtSecret,
+		MongoURI:  mongoURI,
 	}
 
 }

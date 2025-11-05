@@ -13,7 +13,11 @@ func main() {
 	cfg := config.LoadConfig()
 	srv := server.NewServer(":"+cfg.Port, nil, logger)
 
-	srv.Start()
+	client := config.ConnectMongo(cfg.MongoURI)
+	logger.Info("MongoDB client initialized", zap.Any("client", client))
 
+	defer config.DisconnectMongo()
+
+	srv.Start()
 	srv.Shutdown()
 }
