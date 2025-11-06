@@ -1,14 +1,12 @@
-package api
+package auth
 
 import (
 	"github.com/gorilla/mux"
-	"github.com/nishchayrajput/naitri/internal/handler/auth"
+	"github.com/nishchayrajput/naitri/internal/handler"
 )
 
-func NewAuthRoutes(router *mux.Router) {
-	authRouter := router.PathPrefix("auth/").Subrouter()
-
-	authRouter.HandleFunc("login/", auth.LoginHandler).Methods("POST")
-	authRouter.HandleFunc("signup/", auth.SignUpHandler).Methods("POST")
-
+func NewAuthRoutes(router *mux.Router, handlers *handler.Handler) {
+	authRouter := router.PathPrefix("/auth").Subrouter()
+	authRouter.HandleFunc("/login", handlers.AuthHandler.LoginHandler).Methods("POST")
+	authRouter.HandleFunc("/signup", handlers.AuthHandler.SignUpHandler).Methods("POST")
 }

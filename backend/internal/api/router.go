@@ -1,11 +1,17 @@
 package api
 
-import "github.com/gorilla/mux"
+import (
+	"github.com/gorilla/mux"
+	api "github.com/nishchayrajput/naitri/internal/api/auth"
+	"github.com/nishchayrajput/naitri/internal/handler"
+)
 
-func NewRouter() *mux.Router {
+func NewRouter(handlers *handler.Handler) *mux.Router {
 	router := mux.NewRouter()
 
-	api := router.PathPrefix("/api/v1").Subrouter()
+	apiRouter := router.PathPrefix("/api/v1").Subrouter()
+
+	api.NewAuthRoutes(apiRouter, handlers)
 
 	return router
 }

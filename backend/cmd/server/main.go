@@ -1,23 +1,29 @@
 package main
 
 import (
+	"log"
+	"net/http"
+
+	"github.com/nishchayrajput/naitri/internal/api"
 	"github.com/nishchayrajput/naitri/internal/config"
-	"github.com/nishchayrajput/naitri/internal/server"
-	"go.uber.org/zap"
+	"github.com/nishchayrajput/naitri/internal/handler"
+	"github.com/nishchayrajput/naitri/internal/repository"
+	"github.com/nishchayrajput/naitri/internal/service"
 )
 
 func main() {
-
-	logger, _ := zap.NewProduction()
-
 	cfg := config.LoadConfig()
-	srv := server.NewServer(":"+cfg.Port, nil, logger)
+	mongoClient := config.ConnectMongo(cfg.MongoURI)
+	db := mongoClient.Database("naitri")
 
-	client := config.ConnectMongo(cfg.MongoURI)
-	logger.Info("MongoDB client initialized", zap.Any("client", client))
+	// jwtSecret := []byte(os.Getenv("JWT_SECRET"))
+	userRepo := repository.NewUserRepository(db)
 
-	defer config.DisconnectMongo()
+	services := service.NewService(userRepo, []byte(cfg.JWTSecret))
+	handlers := handler.NewHandler(services.AuthService /*, other services */)
 
-	srv.Start()
-	srv.Shutdown()
+	router := api.NewRouter(handlers)
+	// auth.NewAuthRoutes(router, handlers)
+
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
