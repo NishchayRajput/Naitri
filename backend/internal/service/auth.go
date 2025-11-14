@@ -16,6 +16,10 @@ type AuthService struct {
 }
 
 func (s *AuthService) SignupService(email string, password string, name string) error {
+	if email == "" || password == "" || name == "" {
+		return errors.New("all fields are required")
+	}
+
 	existingUser, _ := s.uRepo.GetUserByEmail(email)
 	if existingUser != nil {
 		return errors.New("user already exists")
