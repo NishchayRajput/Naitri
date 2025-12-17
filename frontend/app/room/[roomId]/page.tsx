@@ -1,60 +1,74 @@
 "use client"
 
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { useRef } from "react"
 import { useWebRTC } from "@/hooks/useWebRTC"
+import VideoTile from "@/components/VideoTile"
+import Controls from "@/components/Controls"
 
 export default function RoomPage() {
-    const { roomId } = useParams<{ roomId: string }>()
+  const { roomId } = useParams<{ roomId: string }>()
+  const router = useRouter()
 
-    const localVideoRef = useRef<HTMLVideoElement>(null!)
-    const remoteVideoRef = useRef<HTMLVideoElement>(null!)
+  const localVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const peerIdRef = useRef(crypto.randomUUID())
 
-    // ✅ peerId MUST be stable
-    const peerIdRef = useRef<string>(crypto.randomUUID())
+  const {
+    startScreenShare,
+    stopScreenShare,
+  } = useWebRTC(
+    roomId,
+    peerIdRef.current,
+    localVideoRef,
+    remoteVideoRef
+  )
 
-    useWebRTC(
-        roomId,
-        peerIdRef.current,
-        localVideoRef,
-        remoteVideoRef
-    )
-    const { startScreenShare, stopScreenShare } = useWebRTC(
-        roomId,
-        peerIdRef.current,
-        localVideoRef,
-        remoteVideoRef
-    )
+  const toggleMic = () => {
+    localVideoRef.current?.srcObject
+      ?.getAudioTracks()
+      .forEach((t) => (t.enabled = !t.enabled))
+  }
 
-    return (
-        <div>
-            <h2>Room: {roomId}</h2>
+  const toggleCam = () => {
+    localVideoRef.current?.srcObject
+      ?.getVideoTracks()
+      .forEach((t) => (t.enabled = !t.enabled))
+  }
 
-            <div style={{ display: "flex", gap: "20px" }}>
-                <div>
-                    <p>Local</p>
-                    <video
-                        ref={localVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        style={{ width: "300px" }}
-                    />
-                </div>
+  const leaveCall = () => {
+    router.push("/")
+  }
 
-                <div>
-                    <p>Remote</p>
-                    <video
-                        ref={remoteVideoRef}
-                        autoPlay
-                        playsInline
-                        style={{ width: "300px" }}
-                    />
-                </div>
-            </div>
-            <button onClick={startScreenShare}>Share Screen</button>
-            <button onClick={stopScreenShare}>Stop Sharing</button>
+  return (
+    <div style={styles.container}>
+      <h2>Room: {roomId}</h2>
 
-        </div>
-    )
+      <div style={styles.videos}>
+        <VideoTile videoRef={localVideoRef} label="You" muted />
+        <VideoTile videoRef={remoteVideoRef} label="Remote" />
+      </div>
+
+      <Controls
+        onToggleMic={toggleMic}
+        onToggleCam={toggleCam}
+        onShareScreen={startScreenShare}
+        onStopShare={stopScreenShare}
+        onLeave={leaveCall}
+      />
+    </div>
+  )
+}
+
+const styles = {
+  container: {
+    padding: "20px",
+    textAlign: "center" as const,
+  },
+  videos: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "20px",
+    marginTop: "20px",
+  },
 }
