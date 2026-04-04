@@ -2,16 +2,19 @@
 
 import { useParams, useRouter } from "next/navigation"
 import { useRef, useState } from "react"
+import { useAuth } from "@/contexts/AuthContext"
 import { useWebRTC } from "@/hooks/useWebRTC"
 import VideoTile from "@/components/VideoTile"
 import Controls from "@/components/Controls"
+import ProtectedRoute from "@/components/ProtectedRoute"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Copy, Check } from "lucide-react"
 
-export default function RoomPage() {
+function RoomContent() {
   const { roomId } = useParams<{ roomId: string }>()
   const router = useRouter()
+  const { user } = useAuth()
   const [copied, setCopied] = useState(false)
   const [isMicOn, setIsMicOn] = useState(true)
   const [isCamOn, setIsCamOn] = useState(true)
@@ -131,7 +134,7 @@ export default function RoomPage() {
           <div className="animate-slide-in-left">
             <VideoTile 
               videoRef={localVideoRef} 
-              label="You" 
+              label={user?.name || "You"}
               muted 
               isCamOn={isCamOn}
             />
@@ -158,5 +161,13 @@ export default function RoomPage() {
         />
       </div>
     </div>
+  )
+}
+
+export default function RoomPage() {
+  return (
+    <ProtectedRoute>
+      <RoomContent />
+    </ProtectedRoute>
   )
 }

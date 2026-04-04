@@ -2,14 +2,17 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/contexts/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Video, Users, Shield, Sparkles } from "lucide-react"
+import { Video, Users, Shield, Sparkles, LogOut } from "lucide-react"
+import AuthForm from "@/components/AuthForm"
 
 export default function Home() {
   const [roomId, setRoomId] = useState("")
   const router = useRouter()
+  const { user, logout, isLoading } = useAuth()
 
   const joinRoom = () => {
     if (!roomId.trim()) return
@@ -21,6 +24,50 @@ export default function Home() {
     router.push(`/room/${newRoomId}`)
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 relative overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+          <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-blue-300/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+        </div>
+
+        <div className="container mx-auto px-4 py-16 relative z-10">
+          <div className="text-center mb-12">
+            <div className="flex justify-center mb-6 animate-float">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl blur-xl opacity-50 animate-pulse"></div>
+                <div className="relative bg-gradient-to-br from-blue-600 to-blue-700 p-5 rounded-2xl shadow-2xl shadow-blue-500/40">
+                  <Video className="w-14 h-14 text-white" />
+                </div>
+              </div>
+            </div>
+            <h1 className="text-7xl font-bold bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-600 bg-clip-text text-transparent mb-4 animate-fade-in">
+              Naitri Video
+            </h1>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto animate-fade-in-up">
+              Connect with anyone, anywhere. Experience crystal-clear video calls with professional simplicity.
+            </p>
+          </div>
+
+          <div className="max-w-md mx-auto">
+            <AuthForm />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 relative overflow-hidden">
       {/* Animated Background Elements */}
@@ -28,6 +75,31 @@ export default function Home() {
         <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400/20 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
         <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-blue-300/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+      </div>
+
+      {/* User Info Bar */}
+      <div className="absolute top-4 right-4 z-20">
+        <Card className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-blue-200/50 dark:border-blue-800/50">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center text-white font-bold">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-semibold text-sm">{user.name}</p>
+                <p className="text-xs text-gray-500">{user.email}</p>
+              </div>
+            </div>
+            <Button
+              onClick={logout}
+              variant="ghost"
+              size="sm"
+              className="ml-2"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Hero Section */}
@@ -45,7 +117,7 @@ export default function Home() {
             Naitri Video
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto animate-fade-in-up">
-            Connect with anyone, anywhere. Experience crystal-clear video calls with professional simplicity.
+            Welcome back, {user.name}! Ready to connect?
           </p>
         </div>
 

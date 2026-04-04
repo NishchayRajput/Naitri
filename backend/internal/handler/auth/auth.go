@@ -29,13 +29,20 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.authService.LoginService(req.Email, req.Password)
+	token, user, err := h.authService.LoginService(req.Email, req.Password)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	utils.JsonResponse(w, http.StatusOK, map[string]string{"token": token})
+	utils.JsonResponse(w, http.StatusOK, map[string]interface{}{
+		"token": token,
+		"user": map[string]string{
+			"id":    user.ID,
+			"name":  user.Name,
+			"email": user.Email,
+		},
+	})
 }
 
 func (h *AuthHandler) SignUpHandler(w http.ResponseWriter, r *http.Request) {

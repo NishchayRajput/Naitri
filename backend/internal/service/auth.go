@@ -40,21 +40,21 @@ func (s *AuthService) SignupService(email string, password string, name string) 
 	return s.uRepo.CreateUser(user)
 }
 
-func (s *AuthService) LoginService(email string, password string) (string, error) {
+func (s *AuthService) LoginService(email string, password string) (string, *model.User, error) {
 	user, err := s.uRepo.GetUserByEmail(email)
 	if err != nil {
-		return "", errors.New("user not found")
+		return "", nil, errors.New("user not found")
 	}
 
 	if !utils.CheckPasswordHash(user.Password, password) {
-		return "", errors.New("invalid credentials")
+		return "", nil, errors.New("invalid credentials")
 	}
 
 	token, err := utils.GenerateJWT(user.Email, s.JWTSecret)
 
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	return token, nil
+	return token, user, nil
 }
