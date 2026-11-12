@@ -1,6 +1,6 @@
 module github.com/nishchayrajput/naitri
 
-go 1.23.0
+go 1.26.0
 
 require github.com/joho/godotenv v1.5.1
 
@@ -26,6 +26,7 @@ require (
 	github.com/wlynxg/anet v0.0.5 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/time v0.16.0 // indirect
 )
 
 require (

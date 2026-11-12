@@ -1,24 +1,18 @@
 package service
 
 import (
+	"github.com/nishchayrajput/naitri/internal/auth"
 	"github.com/nishchayrajput/naitri/internal/repository"
 )
 
 type Service struct {
-	AuthService *AuthService
-	// Add more services here as needed
-	// UserService *UserService
-	// ProductService *ProductService
+	Auth *AuthService
+	Room *RoomService
 }
 
-func NewService(userRepo *repository.UserRepository, jwtSecret []byte /*, other repos */) *Service {
-	authService := &AuthService{
-		JWTSecret: jwtSecret,
-		uRepo:     userRepo,
-	}
+func New(repo *repository.Repository, issuer *auth.Issuer) *Service {
 	return &Service{
-		AuthService: authService,
-		// UserService: userService,
-		// ProductService: productService,
+		Auth: NewAuthService(repo.Users, issuer),
+		Room: NewRoomService(repo.Rooms),
 	}
 }

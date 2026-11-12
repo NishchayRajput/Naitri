@@ -1,51 +1,118 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
+// Config holds every tunable the server reads at boot. Values come from the
+// environment; .env is loaded first when present so local development needs no
+// shell setup.
 type Config struct {
-	Port      string
-	Env       string
-	JWTSecret string
-	MongoURI  string
+	Port string
+	Env  string
+
+	MongoURI string
+	MongoDB  string
+
+	JWTSecret       []byte
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
+
+	AllowedOrigins []string
+
+	// ICE servers handed to browsers when they join. A TURN server is optional
+	// but strongly recommended in production: without one, clients behind
+	// symmetric NAT cannot reach the SFU.
+	STUNURLs    []string
+	TURNURL     string
+	TURNUser    string
+	TURNPass    string
+	PublicIP    string
+	MaxRoomSize int
 }
 
-func LoadConfig() *Config {
+func (c *Config) IsProduction() bool { return c.Env == "production" }
 
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, relying on environment variables")
+// Load reads configuration from the environment, applying development-friendly
+// defaults. It returns an error rather than calling log.Fatal so the caller
+// controls shutdown.
+func Load() (*Config, error) {
+	_ = godotenv.Load()
+
+	cfg := &Config{
+		Port:            env("PORT", "5000"),
+		Env:             env("ENV", "development"),
+		MongoURI:        env("MONGO_URI", "mongodb://localhost:27017"),
+		MongoDB:         env("MONGO_DB", "naitri"),
+		AccessTokenTTL:  envDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL: envDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
+		AllowedOrigins:  envList("ALLOWED_ORIGINS", "http://localhost:3000"),
+		STUNURLs:        envList("STUN_URLS", "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"),
+		TURNURL:         env("TURN_URL", ""),
+		TURNUser:        env("TURN_USERNAME", ""),
+		TURNPass:        env("TURN_PASSWORD", ""),
+		PublicIP:        env("PUBLIC_IP", ""),
+		MaxRoomSize:     envInt("MAX_ROOM_SIZE", 25),
 	}
 
-	port := os.Getenv("PORT")
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		// Refusing to boot without a secret in production prevents accidentally
+		// shipping a server that signs tokens with a predictable key.
+		if cfg.IsProduction() {
+			return nil, fmt.Errorf("JWT_SECRET is required when ENV=production")
+		}
+		secret = "naitri-insecure-development-secret-do-not-use-in-production"
+	}
+	if cfg.IsProduction() && len(secret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 bytes in production, got %d", len(secret))
+	}
+	cfg.JWTSecret = []byte(secret)
 
-	if port == "" {
-		log.Fatal("PORT environment variable is required")
+	if cfg.MaxRoomSize <= 0 {
+		return nil, fmt.Errorf("MAX_ROOM_SIZE must be positive, got %d", cfg.MaxRoomSize)
 	}
 
-	env := os.Getenv("ENV")
-	if env == "" {
-		log.Fatal("ENV environment variable is required")
-	}
+	return cfg, nil
+}
 
-	jwtSecret := os.Getenv("JWTSecret")
-	if jwtSecret == "" {
-		log.Fatal("JWTSecret environment variable is required")
+func env(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
 	}
+	return fallback
+}
 
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		log.Fatal("MongoURI not present")
+func envList(key, fallback string) []string {
+	raw := env(key, fallback)
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
 	}
+	return out
+}
 
-	return &Config{
-		Port:      port,
-		Env:       env,
-		JWTSecret: jwtSecret,
-		MongoURI:  mongoURI,
+func envInt(key string, fallback int) int {
+	v, err := strconv.Atoi(env(key, ""))
+	if err != nil {
+		return fallback
 	}
+	return v
+}
 
+func envDuration(key string, fallback time.Duration) time.Duration {
+	d, err := time.ParseDuration(env(key, ""))
+	if err != nil {
+		return fallback
+	}
+	return d
 }
