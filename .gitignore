@@ -9,4 +9,4 @@
 go.work
 vendor/
 .env
-tmp/
+tmp/.env

@@ -175,7 +175,7 @@ func (r *Room) RemovePeer(peerID string) {
 // PublishTrack takes a track arriving on a peer's publisher connection, makes
 // a forwardable copy, attaches it to every other peer, and pumps RTP into it.
 func (r *Room) PublishTrack(owner *Peer, remote *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-	source := ParseSource(remote.StreamID())
+	source := owner.SourceFor(remote.ID(), remote.Kind())
 
 	// Namespacing by peer keeps ids unique across the room, and encoding the
 	// source into the outgoing stream id lets the client group tiles without a

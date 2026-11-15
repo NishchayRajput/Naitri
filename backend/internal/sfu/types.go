@@ -35,13 +35,17 @@ const (
 	SourceScreenAudio TrackSource = "screen-audio"
 )
 
-func ParseSource(s string) TrackSource {
-	switch TrackSource(s) {
+// ParseSource validates a declared source, falling back to the sensible
+// default for the track's media kind.
+func ParseSource(s TrackSource, kind webrtc.RTPCodecType) TrackSource {
+	switch s {
 	case SourceCamera, SourceMicrophone, SourceScreen, SourceScreenAudio:
-		return TrackSource(s)
-	default:
-		return SourceCamera
+		return s
 	}
+	if kind == webrtc.RTPCodecTypeAudio {
+		return SourceMicrophone
+	}
+	return SourceCamera
 }
 
 // Message is the envelope for every frame on the signaling socket.
@@ -54,6 +58,12 @@ type Message struct {
 
 type SDPPayload struct {
 	SDP webrtc.SessionDescription `json:"sdp"`
+	// Tracks maps MediaStreamTrack.id -> source for the tracks carried by this
+	// offer. The browser assigns MediaStream ids itself and gives no way to set
+	// them, so the source cannot ride along in the msid; it is declared here
+	// instead. The map is recorded before SetRemoteDescription, so it is always
+	// populated by the time OnTrack fires.
+	Tracks map[string]TrackSource `json:"tracks,omitempty"`
 }
 
 type TricklePayload struct {

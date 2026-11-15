@@ -50,6 +50,11 @@ type Peer struct {
 	mu    sync.RWMutex
 	state PeerState
 
+	// trackSources maps MediaStreamTrack.id -> declared source, populated from
+	// each publisher offer before the description is applied.
+	srcMu        sync.RWMutex
+	trackSources map[string]TrackSource
+
 	// Candidates can arrive before the matching SDP has been applied. Pion
 	// rejects AddICECandidate while the remote description is nil, so they are
 	// held here and flushed once it is set.
@@ -201,6 +206,28 @@ func (p *Peer) flushCandidates(target Target) {
 
 // HandlePublisherOffer answers the client's offer. The server is always the
 // answerer here, so this path can never collide with another negotiation.
+// SourceFor resolves a published track's declared source.
+func (p *Peer) SourceFor(trackID string, kind webrtc.RTPCodecType) TrackSource {
+	p.srcMu.RLock()
+	src := p.trackSources[trackID]
+	p.srcMu.RUnlock()
+	return ParseSource(src, kind)
+}
+
+func (p *Peer) recordSources(sources map[string]TrackSource) {
+	if len(sources) == 0 {
+		return
+	}
+	p.srcMu.Lock()
+	defer p.srcMu.Unlock()
+	if p.trackSources == nil {
+		p.trackSources = make(map[string]TrackSource, len(sources))
+	}
+	for id, src := range sources {
+		p.trackSources[id] = src
+	}
+}
+
 func (p *Peer) HandlePublisherOffer(sdp webrtc.SessionDescription) error {
 	if err := p.publisher.SetRemoteDescription(sdp); err != nil {
 		return err

@@ -59,20 +59,21 @@ func (m *Manager) Join(conn *websocket.Conn, room *Room, id Identity) {
 	}
 
 	peer := &Peer{
-		ID:          peerID,
-		UserID:      id.UserID,
-		Name:        sanitizeName(id.Name),
-		AvatarColor: id.AvatarColor,
-		IsHost:      id.IsHost,
-		JoinedAt:    time.Now().UTC(),
-		log:         log,
-		conn:        conn,
-		publisher:   publisher,
-		subscriber:  subscriber,
-		send:        make(chan Message, sendQueue),
-		ctx:         ctx,
-		cancel:      cancel,
-		state:       PeerState{MicOn: true, CamOn: true},
+		ID:           peerID,
+		UserID:       id.UserID,
+		Name:         sanitizeName(id.Name),
+		AvatarColor:  id.AvatarColor,
+		IsHost:       id.IsHost,
+		JoinedAt:     time.Now().UTC(),
+		log:          log,
+		conn:         conn,
+		publisher:    publisher,
+		subscriber:   subscriber,
+		send:         make(chan Message, sendQueue),
+		ctx:          ctx,
+		cancel:       cancel,
+		state:        PeerState{MicOn: true, CamOn: true},
+		trackSources: make(map[string]TrackSource),
 	}
 
 	m.wirePeerConnections(peer, room)
@@ -200,6 +201,8 @@ func (m *Manager) handle(peer *Peer, room *Room, msg Message) error {
 		if err := decodePayload(msg.Payload, &p); err != nil {
 			return err
 		}
+		// Recorded first: OnTrack fires from within SetRemoteDescription.
+		peer.recordSources(p.Tracks)
 		return peer.HandlePublisherOffer(p.SDP)
 
 	case TypeSubscriberAnswer:
