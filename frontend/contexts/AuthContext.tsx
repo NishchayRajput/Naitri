@@ -1,79 +1,95 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { api, User } from '@/lib/api'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { api, setSessionExpiredHandler, tokenStore, type User } from "@/lib/api"
 
-interface AuthContextType {
+interface AuthContextValue {
   user: User | null
-  token: string | null
+  isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   signup: (name: string, email: string, password: string) => Promise<void>
   logout: () => void
-  isLoading: boolean
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Seeded from storage during the first client render so a returning user
+  // does not see a flash of the signed-out screen.
   const [user, setUser] = useState<User | null>(null)
-  const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    // Load auth data from localStorage on mount
-    const storedToken = localStorage.getItem('token')
-    const storedUser = localStorage.getItem('user')
+    let cancelled = false
 
-    if (storedToken && storedUser) {
-      setToken(storedToken)
-      setUser(JSON.parse(storedUser))
+    const cached = tokenStore.user
+    if (cached) setUser(cached)
+
+    // Revalidate against the server: the cached user may be stale, and the
+    // refresh token may have been revoked or expired.
+    void (async () => {
+      if (!tokenStore.access && !tokenStore.refresh) {
+        if (!cancelled) setIsLoading(false)
+        return
+      }
+      try {
+        const fresh = await api.me()
+        if (cancelled) return
+        setUser(fresh)
+        tokenStore.saveUser(fresh)
+      } catch {
+        if (cancelled) return
+        tokenStore.clear()
+        setUser(null)
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
     }
-    setIsLoading(false)
   }, [])
 
-  const login = async (email: string, password: string) => {
-    try {
-      const response = await api.login(email, password)
-      setToken(response.token)
-      setUser(response.user)
-      localStorage.setItem('token', response.token)
-      localStorage.setItem('user', JSON.stringify(response.user))
-    } catch (error) {
-      throw error
-    }
-  }
+  // A failed refresh anywhere in the app must drop the session everywhere.
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      setUser(null)
+      router.push("/")
+    })
+    return () => setSessionExpiredHandler(null)
+  }, [router])
 
-  const signup = async (name: string, email: string, password: string) => {
-    try {
-      await api.signup(name, email, password)
-      // Auto-login after signup
-      await login(email, password)
-    } catch (error) {
-      throw error
-    }
-  }
+  const login = useCallback(async (email: string, password: string) => {
+    const result = await api.login(email, password)
+    tokenStore.save(result)
+    setUser(result.user)
+  }, [])
 
-  const logout = () => {
+  const signup = useCallback(async (name: string, email: string, password: string) => {
+    const result = await api.signup(name, email, password)
+    tokenStore.save(result)
+    setUser(result.user)
+  }, [])
+
+  const logout = useCallback(() => {
+    tokenStore.clear()
     setUser(null)
-    setToken(null)
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    router.push('/')
-  }
+    router.push("/")
+  }, [router])
 
-  return (
-    <AuthContext.Provider value={{ user, token, login, signup, logout, isLoading }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, isLoading, login, signup, logout }),
+    [user, isLoading, login, signup, logout],
   )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>")
+  return ctx
 }
