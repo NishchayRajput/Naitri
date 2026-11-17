@@ -22,10 +22,6 @@ func NewRouter(
 ) http.Handler {
 	r := mux.NewRouter()
 
-	r.Use(middleware.Recover(log))
-	r.Use(middleware.RequestLogger(log))
-	r.Use(middleware.CORS(cfg.AllowedOrigins))
-
 	r.Handle("/healthz", h.Health).Methods(http.MethodGet)
 
 	// The signaling socket authenticates itself: the WebSocket handshake
@@ -61,5 +57,16 @@ func NewRouter(
 		utils.Error(w, http.StatusMethodNotAllowed, "method_not_allowed", "That method is not supported here.")
 	})
 
-	return r
+	// Wrapped OUTSIDE the mux rather than registered with r.Use: gorilla/mux
+	// only runs Use middleware on routes that match, so a CORS preflight
+	// (OPTIONS, which matches no GET/POST route) would fall through to the
+	// NotFoundHandler with no CORS headers and the browser would block the
+	// real request. Wrapping here also means 404s and panics in unmatched
+	// routes are still logged and recovered.
+	var handler http.Handler = r
+	handler = middleware.CORS(cfg.AllowedOrigins)(handler)
+	handler = middleware.RequestLogger(log)(handler)
+	handler = middleware.Recover(log)(handler)
+
+	return handler
 }

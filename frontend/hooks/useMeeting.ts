@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { signalingUrl, api } from "@/lib/api"
 import { AudioLevelMonitor } from "@/lib/audio"
-import { getDisplayMedia, type DevicePreferences } from "@/lib/devices"
+import { getDisplayMedia, getUserMedia, type DevicePreferences } from "@/lib/devices"
 import { RtcTransport, type RemoteTrackEvent } from "@/lib/rtc"
 import { SignalingClient, type SignalingStatus } from "@/lib/signaling"
 import type {
@@ -139,8 +139,12 @@ export function useMeeting(opts: UseMeetingOptions) {
 
   // ------------------------------------------------------------- publishing
 
-  /** Publishes the local camera and microphone onto a fresh transport. */
-  const publishLocalMedia = useCallback(async () => {
+  /**
+   * Attaches the current local tracks to the transport. Publishes when there
+   * is no sender yet and replaces in place when there is, so re-acquiring the
+   * camera does not force a renegotiation or make the user blink out.
+   */
+  const syncLocalTracks = useCallback(async () => {
     const transport = transportRef.current
     const stream = localStreamRef.current
     if (!transport || !stream) return
@@ -150,22 +154,31 @@ export function useMeeting(opts: UseMeetingOptions) {
 
     if (audioTrack) {
       audioTrack.enabled = stateRef.current.micOn
-      micSenderRef.current = await transport.publish(audioTrack, stream, "microphone")
+      if (micSenderRef.current) {
+        await transport.replaceTrack(micSenderRef.current, audioTrack, "microphone")
+      } else {
+        micSenderRef.current = await transport.publish(audioTrack, stream, "microphone")
+      }
     }
+
     if (videoTrack) {
       videoTrack.enabled = stateRef.current.camOn
-      camSenderRef.current = await transport.publish(videoTrack, stream, "camera")
+      if (camSenderRef.current) {
+        await transport.replaceTrack(camSenderRef.current, videoTrack, "camera")
+      } else {
+        camSenderRef.current = await transport.publish(videoTrack, stream, "camera")
+      }
     }
 
     // Re-publish an in-progress screen share after a reconnect.
     const screen = screenStreamRef.current
     if (screen) {
       const screenVideo = screen.getVideoTracks()[0]
-      if (screenVideo) {
+      if (screenVideo && !screenSenderRef.current) {
         screenSenderRef.current = await transport.publish(screenVideo, screen, "screen")
       }
       const screenAudio = screen.getAudioTracks()[0]
-      if (screenAudio) {
+      if (screenAudio && !screenAudioSenderRef.current) {
         screenAudioSenderRef.current = await transport.publish(screenAudio, screen, "screen-audio")
       }
     }
@@ -202,7 +215,7 @@ export function useMeeting(opts: UseMeetingOptions) {
           })
           transportRef.current = next
 
-          void publishLocalMedia().then(() => publishState({}))
+          void syncLocalTracks().then(() => publishState({}))
           break
         }
 
@@ -277,7 +290,7 @@ export function useMeeting(opts: UseMeetingOptions) {
           break
       }
     },
-    [applyRemoteTrack, clearRemoteTrack, publishLocalMedia, publishState],
+    [applyRemoteTrack, clearRemoteTrack, syncLocalTracks, publishState],
   )
 
   // ------------------------------------------------------------- connection
@@ -330,8 +343,51 @@ export function useMeeting(opts: UseMeetingOptions) {
     }
   }, [roomCode, handleMessage])
 
-  // Tear down capture devices only on unmount: doing it inside the connection
-  // effect would kill the camera on every reconnect.
+  // Keep a live local stream.
+  //
+  // The unmount cleanup below stops the capture tracks, which is correct when
+  // the user really navigates away. React StrictMode, however, mounts ->
+  // unmounts -> remounts in development, so that cleanup also kills the stream
+  // handed over from the lobby. Rather than trying to detect a "fake" unmount,
+  // this effect heals a dead stream by re-acquiring it. Permission is already
+  // granted at this point, so there is no second prompt. It also covers the
+  // real-world case of the OS or another app seizing the camera.
+  useEffect(() => {
+    let cancelled = false
+
+    const ensureLiveStream = async () => {
+      const existing = localStreamRef.current
+      const alive = existing?.getTracks().some((t) => t.readyState === "live")
+      if (alive) return
+
+      try {
+        const fresh = await getUserMedia(opts.devicePrefs)
+        if (cancelled) {
+          fresh.getTracks().forEach((t) => t.stop())
+          return
+        }
+        fresh.getAudioTracks().forEach((t) => (t.enabled = stateRef.current.micOn))
+        fresh.getVideoTracks().forEach((t) => (t.enabled = stateRef.current.camOn))
+
+        localStreamRef.current = fresh
+        setLocalStream(fresh)
+        // The transport may already exist (welcome can land first), so push
+        // the new tracks onto it.
+        await syncLocalTracks()
+      } catch (err) {
+        console.error("[meeting] could not acquire local media", err)
+      }
+    }
+
+    void ensureLiveStream()
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncLocalTracks])
+
+  // Release capture devices when the meeting is genuinely torn down.
   useEffect(() => {
     return () => {
       localStreamRef.current?.getTracks().forEach((t) => t.stop())

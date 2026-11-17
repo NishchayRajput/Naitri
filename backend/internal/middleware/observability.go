@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"bufio"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -31,9 +34,27 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 	return s.ResponseWriter.Write(b)
 }
 
-// Unwrap lets http.ResponseController reach the underlying writer, which is
-// what keeps the WebSocket hijack working through this wrapper.
+// Unwrap lets http.ResponseController reach the underlying writer.
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+// Hijack forwards to the underlying connection so the WebSocket upgrade works
+// through this wrapper. gorilla/websocket type-asserts for http.Hijacker
+// directly rather than going through http.ResponseController, so Unwrap alone
+// is not enough: without this method every /ws handshake fails with a 500.
+func (s *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := s.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+	}
+	return hijacker.Hijack()
+}
+
+// Flush keeps streaming responses working through the wrapper.
+func (s *statusRecorder) Flush() {
+	if flusher, ok := s.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
 
 func RequestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

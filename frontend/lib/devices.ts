@@ -39,13 +39,11 @@ export async function listDevices(): Promise<DeviceOption[]> {
   if (!navigator.mediaDevices?.enumerateDevices) return []
 
   const devices = await navigator.mediaDevices.enumerateDevices()
-  return devices
-    .filter((d) => d.kind !== "videooutput")
-    .map((d, i) => ({
-      deviceId: d.deviceId,
-      kind: d.kind,
-      label: d.label || `${friendlyKind(d.kind)} ${i + 1}`,
-    }))
+  return devices.map((d, i) => ({
+    deviceId: d.deviceId,
+    kind: d.kind,
+    label: d.label || `${friendlyKind(d.kind)} ${i + 1}`,
+  }))
 }
 
 function friendlyKind(kind: MediaDeviceKind): string {

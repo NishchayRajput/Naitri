@@ -1,6 +1,6 @@
 module github.com/nishchayrajput/naitri
 
-go 1.26.0
+go 1.23.0
 
 require (
 	github.com/google/uuid v1.6.0
@@ -8,8 +8,9 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/pion/interceptor v0.1.42
 	github.com/pion/rtcp v1.2.16
+	github.com/pion/rtp v1.8.26
 	github.com/pion/webrtc/v4 v4.1.8
-	golang.org/x/time v0.16.0
+	golang.org/x/time v0.8.0
 )
 
 require (
@@ -19,7 +20,6 @@ require (
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.1.0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/rtp v1.8.26 // indirect
 	github.com/pion/sctp v1.8.41 // indirect
 	github.com/pion/sdp/v3 v3.0.16 // indirect
 	github.com/pion/srtp/v3 v3.0.9 // indirect

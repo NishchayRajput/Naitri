@@ -3,216 +3,188 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Video, Users, Shield, Sparkles, LogOut } from "lucide-react"
-import AuthForm from "@/components/AuthForm"
+import { api, ApiError } from "@/lib/api"
+import { AuthPanel } from "@/components/auth/AuthPanel"
+import { Wordmark } from "@/components/shared/Logo"
+import { InitialsAvatar } from "@/components/shared/Avatar"
+import {
+  ArrowRight, Loader2, LogOut, MonitorUp, MessageSquare,
+  ShieldCheck, Zap, Video,
+} from "lucide-react"
 
-export default function Home() {
-  const [roomId, setRoomId] = useState("")
-  const router = useRouter()
-  const { user, logout, isLoading } = useAuth()
-
-  const joinRoom = () => {
-    if (!roomId.trim()) return
-    router.push(`/room/${roomId}`)
-  }
-
-  const createRoom = () => {
-    const newRoomId = crypto.randomUUID().slice(0, 8)
-    router.push(`/room/${newRoomId}`)
-  }
+export default function HomePage() {
+  const { user, isLoading, logout } = useAuth()
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 relative overflow-hidden">
-        {/* Animated Background Elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400/20 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
-          <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-blue-300/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
-        </div>
-
-        <div className="container mx-auto px-4 py-16 relative z-10">
-          <div className="text-center mb-12">
-            <div className="flex justify-center mb-6 animate-float">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl blur-xl opacity-50 animate-pulse"></div>
-                <div className="relative bg-gradient-to-br from-blue-600 to-blue-700 p-5 rounded-2xl shadow-2xl shadow-blue-500/40">
-                  <Video className="w-14 h-14 text-white" />
-                </div>
-              </div>
-            </div>
-            <h1 className="text-7xl font-bold bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-600 bg-clip-text text-transparent mb-4 animate-fade-in">
-              Naitri Video
-            </h1>
-            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto animate-fade-in-up">
-              Connect with anyone, anywhere. Experience crystal-clear video calls with professional simplicity.
-            </p>
-          </div>
-
-          <div className="max-w-md mx-auto">
-            <AuthForm />
-          </div>
-        </div>
+      <div className="grid min-h-dvh place-items-center bg-canvas">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900 relative overflow-hidden">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
-        <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-blue-300/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
-      </div>
+    <div className="relative min-h-dvh overflow-hidden bg-canvas grain">
+      <div className="aurora" />
 
-      {/* User Info Bar */}
-      <div className="absolute top-4 right-4 z-20">
-        <Card className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-blue-200/50 dark:border-blue-800/50">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center text-white font-bold">
-                {user.name.charAt(0).toUpperCase()}
+      <div className="relative z-10 mx-auto flex min-h-dvh max-w-6xl flex-col px-5 py-6">
+        <header className="flex items-center justify-between">
+          <Wordmark />
+          {user && (
+            <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-2.5 sm:flex">
+                <InitialsAvatar name={user.name} color={user.avatarColor} size={32} />
+                <div className="leading-tight">
+                  <p className="text-[13px] font-medium text-foreground">{user.name}</p>
+                  <p className="text-[11px] text-muted-foreground">{user.email}</p>
+                </div>
               </div>
-              <div>
-                <p className="font-semibold text-sm">{user.name}</p>
-                <p className="text-xs text-gray-500">{user.email}</p>
-              </div>
+              <button
+                type="button"
+                onClick={logout}
+                aria-label="Sign out"
+                className="grid size-9 place-items-center rounded-xl border border-stroke text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+              >
+                <LogOut className="size-4" />
+              </button>
             </div>
-            <Button
-              onClick={logout}
-              variant="ghost"
-              size="sm"
-              className="ml-2"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
+          )}
+        </header>
+
+        <main className="flex flex-1 items-center py-12">
+          <div className="grid w-full items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+            <section className="animate-rise">
+              <span className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white/4 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-live" />
+                Go SFU · one uplink, any room size
+              </span>
+
+              <h1 className="mt-6 text-balance text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
+                <span className="text-gradient">Meetings</span>
+                <br />
+                that feel close.
+              </h1>
+
+              <p className="mt-5 max-w-md text-pretty text-[15px] leading-relaxed text-muted-foreground">
+                HD video, screen sharing and chat — routed through a selective
+                forwarding unit, so your laptop sends one stream no matter how
+                many people are in the room.
+              </p>
+
+              <div className="mt-9 grid max-w-md gap-3 sm:grid-cols-2">
+                <Feature icon={<Zap />} title="One uplink" body="Your device encodes once, not once per person." />
+                <Feature icon={<MonitorUp />} title="Present anything" body="Share a screen or tab, with audio." />
+                <Feature icon={<MessageSquare />} title="Chat & hands" body="Side conversation without interrupting." />
+                <Feature icon={<ShieldCheck />} title="Encrypted hops" body="DTLS-SRTP on every leg of the call." />
+              </div>
+            </section>
+
+            <section className="w-full max-w-md justify-self-center lg:justify-self-end">
+              {user ? <MeetingLauncher /> : <AuthPanel />}
+            </section>
+          </div>
+        </main>
+
+        <footer className="pt-6 text-[11px] text-muted-foreground/60">
+          Naitri · open-source video meetings
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+function Feature({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
+  return (
+    <div className="rounded-xl border border-stroke bg-white/3 p-3.5">
+      <span className="text-brand [&_svg]:size-4">{icon}</span>
+      <p className="mt-2 text-[13px] font-medium text-foreground">{title}</p>
+      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{body}</p>
+    </div>
+  )
+}
+
+function MeetingLauncher() {
+  const router = useRouter()
+  const [code, setCode] = useState("")
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const createMeeting = async () => {
+    setError(null)
+    setCreating(true)
+    try {
+      const room = await api.createRoom()
+      router.push(`/room/${room.code}`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not create a meeting.")
+      setCreating(false)
+    }
+  }
+
+  const joinMeeting = (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = code.trim()
+    if (!trimmed) return
+    // The room page resolves and normalises the code, so anything
+    // code-shaped — including a pasted link — is accepted here.
+    const fromLink = trimmed.split("/").pop() ?? trimmed
+    router.push(`/room/${encodeURIComponent(fromLink)}`)
+  }
+
+  return (
+    <div className="glass lit-edge rounded-2xl p-6 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.8)] animate-rise">
+      <button
+        type="button"
+        onClick={createMeeting}
+        disabled={creating}
+        className="group flex h-12 w-full items-center justify-center gap-2.5 rounded-xl bg-brand text-sm font-semibold text-primary-foreground transition-all duration-200 hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
+      >
+        {creating ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <>
+            <Video className="size-[18px]" />
+            Start an instant meeting
+          </>
+        )}
+      </button>
+
+      <div className="my-5 flex items-center gap-3">
+        <span className="h-px flex-1 bg-stroke" />
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground/60">or</span>
+        <span className="h-px flex-1 bg-stroke" />
       </div>
 
-      {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16 relative z-10">
-        <div className="text-center mb-16">
-          <div className="flex justify-center mb-6 animate-float">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl blur-xl opacity-50 animate-pulse"></div>
-              <div className="relative bg-gradient-to-br from-blue-600 to-blue-700 p-5 rounded-2xl shadow-2xl shadow-blue-500/40">
-                <Video className="w-14 h-14 text-white" />
-              </div>
-            </div>
-          </div>
-          <h1 className="text-7xl font-bold bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-600 bg-clip-text text-transparent mb-4 animate-fade-in">
-            Naitri Video
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto animate-fade-in-up">
-            Welcome back, {user.name}! Ready to connect?
-          </p>
+      <form onSubmit={joinMeeting} className="space-y-3">
+        <label htmlFor="code" className="block text-xs font-medium text-muted-foreground">
+          Join with a code
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="abc-defg-hij"
+            autoComplete="off"
+            spellCheck={false}
+            className="h-11 min-w-0 flex-1 rounded-xl border border-stroke bg-black/25 px-3.5 font-mono text-sm tracking-wide text-foreground outline-none transition-colors placeholder:font-sans placeholder:tracking-normal placeholder:text-muted-foreground/50 focus:border-brand/60 focus:bg-black/35"
+          />
+          <button
+            type="submit"
+            disabled={!code.trim()}
+            aria-label="Join meeting"
+            className="grid size-11 shrink-0 place-items-center rounded-xl border border-stroke text-foreground transition-all hover:bg-white/8 disabled:opacity-40"
+          >
+            <ArrowRight className="size-4" />
+          </button>
         </div>
+      </form>
 
-        {/* Main Card */}
-        <div className="max-w-2xl mx-auto animate-scale-in">
-          <Card className="shadow-2xl border-blue-200/50 dark:border-blue-800/50 bg-white/70 dark:bg-gray-900/70 backdrop-blur-xl relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5"></div>
-            <CardHeader className="text-center relative z-10">
-              <CardTitle className="text-4xl font-bold bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                Join a Video Room
-              </CardTitle>
-              <CardDescription className="text-base mt-2">
-                Enter a room ID to join an existing call or create a new one
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 relative z-10">
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  <Input
-                    placeholder="Enter Room ID"
-                    value={roomId}
-                    onChange={(e) => setRoomId(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && joinRoom()}
-                    className="flex-1 h-14 text-lg border-2 border-blue-300/50 dark:border-blue-700/50 focus:ring-2 focus:ring-blue-500 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm transition-all"
-                  />
-                  <Button 
-                    onClick={joinRoom} 
-                    disabled={!roomId.trim()}
-                    className="h-14 px-10 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 font-semibold"
-                  >
-                    Join Room
-                  </Button>
-                </div>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-gray-300 dark:border-gray-600" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white dark:bg-gray-900 px-2 text-gray-500">Or</span>
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={createRoom} 
-                  variant="outline"
-                  className="w-full h-14 text-lg border-2 border-blue-300 dark:border-blue-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 dark:hover:from-blue-950/30 dark:hover:to-indigo-950/30 text-blue-700 dark:text-blue-400 font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg"
-                >
-                  <Sparkles className="mr-2 h-5 w-5 animate-pulse" />
-                  Create New Room
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Features */}
-          <div className="grid md:grid-cols-3 gap-6 mt-12">
-            <Card className="text-center border-blue-100/50 dark:border-blue-900/50 hover:shadow-2xl hover:shadow-blue-500/20 transition-all duration-500 bg-white/60 dark:bg-gray-900/60 backdrop-blur-md group hover:scale-105 hover:-translate-y-2">
-              <CardContent className="pt-6">
-                <div className="bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                  <Video className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-                </div>
-                <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-200">HD Quality</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Crystal-clear video and audio for the best experience
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="text-center border-indigo-100/50 dark:border-indigo-900/50 hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-500 bg-white/60 dark:bg-gray-900/60 backdrop-blur-md group hover:scale-105 hover:-translate-y-2">
-              <CardContent className="pt-6">
-                <div className="bg-gradient-to-br from-indigo-100 to-indigo-200 dark:from-indigo-900/30 dark:to-indigo-800/30 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                  <Users className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-                </div>
-                <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-200">Easy to Use</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Join rooms instantly with just a room ID
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="text-center border-blue-100/50 dark:border-blue-900/50 hover:shadow-2xl hover:shadow-blue-500/20 transition-all duration-500 bg-white/60 dark:bg-gray-900/60 backdrop-blur-md group hover:scale-105 hover:-translate-y-2">
-              <CardContent className="pt-6">
-                <div className="bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                  <Shield className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-                </div>
-                <h3 className="font-bold text-lg mb-2 text-gray-800 dark:text-gray-200">Secure</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  End-to-end encrypted connections
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
+      {error && (
+        <p role="alert" className="mt-3 text-xs text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   )
 }
