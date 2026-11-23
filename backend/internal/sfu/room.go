@@ -342,6 +342,16 @@ func (r *Room) forwardRTP(pt *publishedTrack) {
 			return
 		}
 
+		// Header extension IDs were negotiated on the publisher's connection and
+		// mean nothing, or something else, on each subscriber's. Forwarding
+		// them verbatim sends the publisher's MID, so a browser demuxes the
+		// packet onto the wrong transceiver and silently drops it. Each
+		// subscriber's outgoing interceptors add the extensions that matter
+		// (transport-wide CC) with that connection's own IDs.
+		packet.Header.Extension = false
+		packet.Header.ExtensionProfile = 0
+		packet.Header.Extensions = nil
+
 		// WriteRTP rewrites SSRC and payload type per subscriber binding, so a
 		// single call serves every attached sender. io.ErrClosedPipe means the
 		// track has no bindings right now, which is normal and not fatal.

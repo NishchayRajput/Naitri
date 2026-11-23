@@ -11,6 +11,7 @@ import { SettingsSheet } from "./SettingsSheet"
 import { AudioSink } from "./AudioSink"
 import { StageLayout, VideoGrid, type RosterEntry } from "./VideoGrid"
 import { MeetingEnded } from "./MeetingEnded"
+import { Check, Link2 } from "lucide-react"
 
 interface MeetingRoomProps {
   roomCode: string
@@ -132,6 +133,9 @@ export function MeetingRoom({
 
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-canvas">
+      {/* Faint lime wash at the top so the room is not a flat black box. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_55%_100%_at_50%_0%,oklch(0.9_0.19_125_/_7%),transparent)]" />
+
       <MeetingHeader
         roomName={room?.name ?? fallbackRoomName}
         roomCode={roomCode}
@@ -140,11 +144,18 @@ export function MeetingRoom({
         joinedAt={joinedAt.current}
       />
 
-      <main className="flex min-h-0 flex-1 gap-3 px-3 pb-24">
-        <div className="min-w-0 flex-1">
+      <main className="relative flex min-h-0 flex-1 gap-3 px-3 pb-24 sm:px-4 sm:pb-28">
+        <div className="relative min-w-0 flex-1">
+          {roster.length === 1 && roster[0].isSelf && <InviteCard roomCode={roomCode} />}
           {roster.length === 0 ? (
-            <div className="grid size-full place-items-center text-sm text-muted-foreground">
-              Connecting to the meeting…
+            <div className="grid size-full place-items-center">
+              <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                <span className="relative grid size-14 place-items-center">
+                  <span className="absolute inset-0 animate-ping rounded-full bg-brand/20" />
+                  <span className="size-3 rounded-full bg-brand" />
+                </span>
+                <span className="text-[14px]">Connecting to the meeting…</span>
+              </div>
             </div>
           ) : stage ? (
             <StageLayout
@@ -159,7 +170,7 @@ export function MeetingRoom({
         </div>
 
         {panel && (
-          <div className="absolute inset-0 z-40 bg-canvas/95 p-3 lg:static lg:z-auto lg:w-[340px] lg:shrink-0 lg:bg-transparent lg:p-0">
+          <div className="absolute inset-0 z-40 bg-canvas/95 p-3 pb-24 lg:static lg:z-auto lg:w-[360px] lg:shrink-0 lg:bg-transparent lg:p-0">
             <SidePanel
               panel={panel}
               onSwitch={setPanel}
@@ -214,6 +225,42 @@ export function MeetingRoom({
         onClose={() => setSettingsOpen(false)}
         onSwitchDevice={actions.switchDevice}
       />
+    </div>
+  )
+}
+
+/** Shown while you are alone, so the obvious next step is one click away. */
+function InviteCard({ roomCode }: { roomCode: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/room/${roomCode}`)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard can be blocked by permissions policy; the code is shown.
+    }
+  }
+
+  return (
+    <div className="absolute inset-x-0 top-3 z-10 flex justify-center px-3 animate-rise">
+      <div className="glass-high flex w-full max-w-md items-center gap-3 rounded-2xl p-2.5 pl-4 shadow-float">
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold text-foreground">You&apos;re the first one here</p>
+          <p className="truncate text-[12px] text-muted-foreground">
+            Share the link: <span className="font-mono">{roomCode}</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={copy}
+          className="flex h-10 shrink-0 items-center gap-2 rounded-xl bg-brand px-4 text-[13px] font-semibold text-brand-ink transition-all hover:brightness-105 active:scale-95"
+        >
+          {copied ? <Check className="size-4" /> : <Link2 className="size-4" />}
+          {copied ? "Copied" : "Copy link"}
+        </button>
+      </div>
     </div>
   )
 }

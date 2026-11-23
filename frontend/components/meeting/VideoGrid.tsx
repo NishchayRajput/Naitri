@@ -61,7 +61,7 @@ interface StageLayoutProps {
  */
 export function StageLayout({ stage, others, onTogglePin, pinnedPeerId }: StageLayoutProps) {
   return (
-    <div className="flex size-full flex-col gap-3 lg:flex-row">
+    <div className="flex size-full flex-col gap-3.5 lg:flex-row">
       <div className="min-h-0 flex-1">
         <VideoTile
           participant={stage.entry.participant}
@@ -77,7 +77,7 @@ export function StageLayout({ stage, others, onTogglePin, pinnedPeerId }: StageL
       </div>
 
       {others.length > 0 && (
-        <div className="no-scrollbar flex shrink-0 gap-3 overflow-x-auto lg:w-56 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden">
+        <div className="no-scrollbar flex shrink-0 gap-3 overflow-x-auto lg:w-60 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden">
           {others.map((entry) => (
             <VideoTile
               key={entry.participant.peerId}

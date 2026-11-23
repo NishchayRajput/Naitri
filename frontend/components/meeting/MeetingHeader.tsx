@@ -53,54 +53,55 @@ export function MeetingHeader({
   }
 
   return (
-    <header className="z-20 flex shrink-0 items-center gap-3 px-4 py-3">
-      <Logo size={26} />
-
-      <div className="flex min-w-0 items-baseline gap-2.5">
-        <h1 className="truncate text-sm font-semibold text-foreground">{roomName}</h1>
-        {locked && <Lock className="size-3 shrink-0 text-amber-300/90" aria-label="Locked" />}
-      </div>
-
-      <button
-        type="button"
-        onClick={copy}
-        className="group hidden items-center gap-2 rounded-lg border border-stroke bg-white/4 px-2.5 py-1.5 text-xs transition-colors hover:border-stroke-strong hover:bg-white/8 sm:flex"
-        aria-label="Copy meeting link"
-      >
-        <span className="font-mono tracking-wide text-muted-foreground group-hover:text-foreground">
-          {roomCode}
-        </span>
-        {copied ? (
-          <Check className="size-3 text-live" />
-        ) : (
-          <Copy className="size-3 text-muted-foreground" />
+    <header className="z-20 flex shrink-0 items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
+      <div className="glass flex min-w-0 items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-2 sm:pr-1.5">
+        <Logo size={28} />
+        <h1 className="truncate text-[14px] font-semibold text-foreground">{roomName}</h1>
+        {locked && (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-hand/15 px-2 py-0.5 text-[11px] font-medium text-hand">
+            <Lock className="size-3" aria-hidden />
+            Locked
+          </span>
         )}
-      </button>
+        <button
+          type="button"
+          onClick={copy}
+          className={cn(
+            "group hidden shrink-0 items-center gap-2 rounded-full px-3 py-1 text-xs transition-colors sm:flex",
+            copied ? "bg-brand/15 text-brand" : "bg-white/6 text-muted-foreground hover:bg-white/10 hover:text-foreground",
+          )}
+          aria-label="Copy meeting link"
+        >
+          <span className="font-mono tracking-wide">{copied ? "Link copied" : roomCode}</span>
+          {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+        </button>
+      </div>
 
       <span className="flex-1" />
 
-      <ConnectionPill status={status} />
-
-      <time className="hidden font-mono text-xs tabular-nums text-muted-foreground sm:block">
-        {elapsed}
-      </time>
+      <div className="glass flex shrink-0 items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-3.5">
+        <ConnectionPill status={status} />
+        <time className="hidden font-mono text-[12px] tabular-nums text-muted-foreground sm:block">
+          {elapsed}
+        </time>
+      </div>
     </header>
   )
 }
 
 function ConnectionPill({ status }: { status: SignalingStatus }) {
   const config = {
-    open: { label: "Live", dot: "bg-live", text: "text-live" },
-    connecting: { label: "Connecting", dot: "bg-amber-400 animate-pulse", text: "text-amber-300" },
-    reconnecting: { label: "Reconnecting", dot: "bg-amber-400 animate-pulse", text: "text-amber-300" },
-    closed: { label: "Disconnected", dot: "bg-destructive", text: "text-destructive" },
+    open: { label: "Live", cls: "bg-brand/15 text-brand", dot: "bg-brand animate-blink" },
+    connecting: { label: "Connecting", cls: "bg-hand/15 text-hand", dot: "bg-hand animate-pulse" },
+    reconnecting: { label: "Reconnecting", cls: "bg-hand/15 text-hand", dot: "bg-hand animate-pulse" },
+    closed: { label: "Offline", cls: "bg-destructive/15 text-destructive", dot: "bg-destructive" },
   }[status]
 
   return (
     <span
       className={cn(
-        "flex items-center gap-1.5 rounded-full border border-stroke bg-white/4 px-2.5 py-1 text-[11px] font-medium",
-        config.text,
+        "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider",
+        config.cls,
       )}
       role="status"
     >

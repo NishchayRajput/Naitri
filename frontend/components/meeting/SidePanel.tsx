@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils"
 import { InitialsAvatar } from "@/components/shared/Avatar"
 import type { RosterEntry } from "./VideoGrid"
 import type { ChatMessage } from "@/types/signaling"
-import { Crown, Hand, MicOff, MonitorUp, SendHorizonal, UserMinus, X } from "lucide-react"
+import { AudioBars } from "@/components/shared/AudioBars"
+import { Crown, Hand, MessageSquare, MicOff, MonitorUp, SendHorizonal, UserMinus, X } from "lucide-react"
 
 interface SidePanelProps {
   panel: "chat" | "people"
@@ -21,28 +22,40 @@ interface SidePanelProps {
 
 export function SidePanel(props: SidePanelProps) {
   return (
-    <aside className="glass flex h-full w-full flex-col rounded-2xl animate-rise lg:w-[340px]">
-      <header className="flex items-center gap-1 border-b border-stroke p-2">
-        {(["chat", "people"] as const).map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => props.onSwitch(p)}
+    <aside className="glass flex h-full w-full flex-col overflow-hidden rounded-[24px] shadow-float animate-rise lg:w-[360px]">
+      <header className="flex items-center gap-2 p-2.5">
+        <div className="relative grid flex-1 grid-cols-2 rounded-2xl bg-black/30 p-1" role="tablist">
+          <span
             className={cn(
-              "flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150",
-              props.panel === p
-                ? "bg-white/8 text-foreground"
-                : "text-muted-foreground hover:text-foreground",
+              "absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-xl bg-surface-high ring-1 ring-stroke transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+              props.panel === "people" && "translate-x-full",
             )}
-          >
-            {p === "chat" ? "Chat" : `People · ${props.roster.length}`}
-          </button>
-        ))}
+            aria-hidden
+          />
+          {(["chat", "people"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              role="tab"
+              aria-selected={props.panel === p}
+              onClick={() => props.onSwitch(p)}
+              className={cn(
+                "relative z-10 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-medium transition-colors duration-150",
+                props.panel === p ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {p === "chat" ? "Chat" : "People"}
+              {p === "people" && (
+                <span className="rounded-full bg-white/8 px-1.5 text-[11px] tabular-nums">{props.roster.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={props.onClose}
           aria-label="Close panel"
-          className="grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-white/8 hover:text-foreground"
+          className="grid size-10 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-white/8 hover:text-foreground"
         >
           <X className="size-4" />
         </button>
@@ -107,16 +120,18 @@ function ChatPane({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 space-y-3 overflow-y-auto p-4"
+        className="flex-1 overflow-y-auto px-3.5 pb-3 pt-1"
       >
         {messages.length === 0 && (
-          <p className="pt-8 text-center text-sm text-muted-foreground">
-            No messages yet.
-            <br />
-            <span className="text-xs text-muted-foreground/70">
-              Messages are visible to everyone in this meeting.
+          <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+            <span className="grid size-12 place-items-center rounded-2xl bg-brand/12 text-brand">
+              <MessageSquare className="size-5" />
             </span>
-          </p>
+            <p className="mt-4 text-[14px] font-medium text-foreground">No messages yet</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+              Say hi! Messages are visible to everyone in the meeting.
+            </p>
+          </div>
         )}
 
         {messages.map((msg, i) => {
@@ -128,27 +143,38 @@ function ChatPane({
             new Date(msg.at).getTime() - new Date(prev.at).getTime() < 120_000
 
           return (
-            <div key={msg.id} className={cn("flex gap-2.5", grouped && "mt-1")}>
-              <div className="w-8 shrink-0">
+            <div
+              key={msg.id}
+              className={cn(
+                "flex gap-2 animate-rise [animation-duration:0.35s]",
+                isSelf ? "flex-row-reverse" : "flex-row",
+                grouped ? "mt-1" : "mt-4",
+              )}
+            >
+              {!isSelf && (
+                <div className="w-7 shrink-0 self-end">
+                  {!grouped && <InitialsAvatar name={msg.name} color={msg.avatarColor} size={28} />}
+                </div>
+              )}
+              <div className={cn("flex min-w-0 max-w-[78%] flex-col", isSelf ? "items-end" : "items-start")}>
                 {!grouped && (
-                  <InitialsAvatar name={msg.name} color={msg.avatarColor} size={32} />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                {!grouped && (
-                  <div className="mb-0.5 flex items-baseline gap-2">
-                    <span className="text-xs font-semibold text-foreground">
+                  <div className={cn("mb-1 flex items-baseline gap-2 px-1", isSelf && "flex-row-reverse")}>
+                    <span className="text-[12px] font-semibold text-foreground/90">
                       {isSelf ? "You" : msg.name}
                     </span>
                     <time className="text-[10px] text-muted-foreground/70">
-                      {new Date(msg.at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {new Date(msg.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </time>
                   </div>
                 )}
-                <p className="break-words text-[13px] leading-relaxed text-foreground/90">
+                <p
+                  className={cn(
+                    "whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[13.5px] leading-relaxed",
+                    isSelf
+                      ? "rounded-br-md bg-brand text-brand-ink"
+                      : "rounded-bl-md bg-white/[0.07] text-foreground/95",
+                  )}
+                >
                   {msg.text}
                 </p>
               </div>
@@ -157,8 +183,8 @@ function ChatPane({
         })}
       </div>
 
-      <form onSubmit={submit} className="border-t border-stroke p-3">
-        <div className="flex items-end gap-2 rounded-xl border border-stroke bg-black/30 p-1.5 transition-colors focus-within:border-brand/50">
+      <form onSubmit={submit} className="p-2.5 pt-1">
+        <div className="flex items-end gap-2 rounded-2xl border border-stroke bg-black/30 p-1.5 transition-all focus-within:border-brand/60 focus-within:shadow-[0_0_0_4px_var(--brand-soft)]">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -172,13 +198,13 @@ function ChatPane({
             rows={1}
             placeholder="Send a message"
             maxLength={2000}
-            className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60"
+            className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2.5 py-2 text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground/60"
           />
           <button
             type="submit"
             disabled={!draft.trim()}
             aria-label="Send message"
-            className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand text-primary-foreground transition-all hover:brightness-110 disabled:bg-white/5 disabled:text-muted-foreground"
+            className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand text-brand-ink transition-all hover:brightness-105 active:scale-95 disabled:bg-white/5 disabled:text-muted-foreground"
           >
             <SendHorizonal className="size-4" />
           </button>
@@ -207,58 +233,82 @@ function PeoplePane({
   })
 
   return (
-    <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
-      {sorted.map(({ participant, isSelf }) => (
-        <div
-          key={participant.peerId}
-          className="group flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/5"
-        >
-          <div className="relative">
-            <InitialsAvatar name={participant.name} color={participant.avatarColor} size={36} />
-            {participant.state.speaking && participant.state.micOn && (
-              <span className="absolute -inset-0.5 rounded-full ring-2 ring-live animate-pulse-ring" />
+    <div className="flex-1 space-y-1 overflow-y-auto px-2.5 pb-3">
+      {sorted.map(({ participant, isSelf }) => {
+        const speaking = participant.state.speaking && participant.state.micOn
+        return (
+          <div
+            key={participant.peerId}
+            className={cn(
+              "group flex items-center gap-3 rounded-2xl px-2.5 py-2.5 transition-colors hover:bg-white/5",
+              participant.state.handRaised && "bg-hand/[0.07]",
             )}
-          </div>
+          >
+            <span className={cn("rounded-full", speaking && "animate-pulse-ring")}>
+              <InitialsAvatar name={participant.name} color={participant.avatarColor} size={38} />
+            </span>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="truncate text-[13px] font-medium text-foreground">
-                {isSelf ? "You" : participant.name}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-[14px] font-medium text-foreground">
+                  {participant.name}
+                </span>
+                {isSelf && <span className="text-[12px] text-muted-foreground">(you)</span>}
+              </div>
+              <div className="mt-0.5 flex items-center gap-2 text-[11px]">
+                {participant.isHost && (
+                  <span className="flex items-center gap-1 font-medium text-hand">
+                    <Crown className="size-3" /> Host
+                  </span>
+                )}
+                {participant.state.screenOn && (
+                  <span className="flex items-center gap-1 font-medium text-brand">
+                    <MonitorUp className="size-3" /> Presenting
+                  </span>
+                )}
+                {participant.state.handRaised && (
+                  <span className="flex items-center gap-1 font-medium text-hand">
+                    <Hand className="size-3 origin-bottom animate-wave" /> Hand raised
+                  </span>
+                )}
+                {!participant.isHost && !participant.state.screenOn && !participant.state.handRaised && (
+                  <span className="text-muted-foreground/70">{speaking ? "Speaking" : "Participant"}</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span
+                className={cn(
+                  "grid size-8 place-items-center rounded-full",
+                  participant.state.micOn ? "text-muted-foreground" : "bg-destructive/12 text-destructive",
+                )}
+              >
+                {participant.state.micOn ? (
+                  <AudioBars active={speaking} className={speaking ? "text-brand" : undefined} />
+                ) : (
+                  <MicOff className="size-3.5" aria-label="Muted" />
+                )}
               </span>
-              {participant.isHost && (
-                <Crown className="size-3 shrink-0 text-amber-300/90" aria-label="Host" />
+
+              {/* Hosts get a remove slot on every row (empty on their own) so the
+                  mic indicators stay in one column. */}
+              {isHost && (isSelf || participant.peerId === selfPeerId) && <span className="size-8" aria-hidden />}
+              {isHost && !isSelf && participant.peerId !== selfPeerId && (
+                <button
+                  type="button"
+                  onClick={() => onRemovePeer(participant.peerId)}
+                  aria-label={`Remove ${participant.name}`}
+                  title={`Remove ${participant.name}`}
+                  className="grid size-8 place-items-center rounded-full text-muted-foreground opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <UserMinus className="size-3.5" />
+                </button>
               )}
             </div>
-            {participant.state.screenOn && (
-              <span className="flex items-center gap-1 text-[11px] text-brand">
-                <MonitorUp className="size-2.5" />
-                Presenting
-              </span>
-            )}
           </div>
-
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            {participant.state.handRaised && (
-              <Hand className="size-3.5 text-amber-300" aria-label="Hand raised" />
-            )}
-            {!participant.state.micOn && (
-              <MicOff className="size-3.5 text-destructive/80" aria-label="Muted" />
-            )}
-
-            {isHost && !isSelf && participant.peerId !== selfPeerId && (
-              <button
-                type="button"
-                onClick={() => onRemovePeer(participant.peerId)}
-                aria-label={`Remove ${participant.name}`}
-                title={`Remove ${participant.name}`}
-                className="grid size-7 place-items-center rounded-lg opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-              >
-                <UserMinus className="size-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

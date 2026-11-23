@@ -9,7 +9,6 @@ import { MeetingRoom } from "@/components/meeting/MeetingRoom"
 import { MeetingEnded } from "@/components/meeting/MeetingEnded"
 import { AuthPanel } from "@/components/auth/AuthPanel"
 import { Wordmark } from "@/components/shared/Logo"
-import { Loader2 } from "lucide-react"
 
 export default function RoomPage() {
   const params = useParams<{ code: string }>()
@@ -43,7 +42,7 @@ export default function RoomPage() {
               ? "This meeting is locked"
               : apiErr?.code === "room_ended"
                 ? "This meeting has ended"
-                : "Meeting not found",
+                  : "Meeting not found",
           detail:
             apiErr?.message ??
             "We couldn't reach the server. Check your connection and try again.",
@@ -64,17 +63,21 @@ export default function RoomPage() {
   // bouncing them to the home page and losing the code.
   if (!user) {
     return (
-      <div className="relative grid min-h-dvh place-items-center overflow-hidden bg-canvas px-4 grain">
-        <div className="aurora" />
-        <div className="relative z-10 w-full max-w-md">
-          <div className="mb-7 text-center">
-            <div className="mb-6 flex justify-center">
+      <div className="relative grid min-h-dvh place-items-center overflow-hidden bg-canvas px-5 py-10 grain">
+        <div className="ambient" />
+        <div className="relative z-10 w-full max-w-md animate-rise">
+          <div className="mb-8 text-center">
+            <div className="mb-8 flex justify-center">
               <Wordmark />
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            <span className="inline-flex items-center gap-2 rounded-full border border-stroke bg-white/4 px-3 py-1.5 text-[12px] font-medium text-muted-foreground">
+              <span className="size-1.5 animate-blink rounded-full bg-brand" />
+              You&apos;ve been invited
+            </span>
+            <h1 className="mt-4 text-[30px] font-semibold tracking-tight text-foreground">
               Sign in to join
             </h1>
-            <p className="mt-2 font-mono text-sm text-muted-foreground">{code}</p>
+            <p className="mt-2 font-mono text-[14px] tracking-wide text-muted-foreground">{code}</p>
           </div>
           <AuthPanel />
         </div>
@@ -119,7 +122,10 @@ export default function RoomPage() {
 function FullScreenSpinner() {
   return (
     <div className="grid min-h-dvh place-items-center bg-canvas">
-      <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      <span className="relative grid size-14 place-items-center" role="status" aria-label="Loading">
+        <span className="absolute inset-0 animate-ping rounded-full bg-brand/20" />
+        <span className="size-3 rounded-full bg-brand" />
+      </span>
     </div>
   )
 }

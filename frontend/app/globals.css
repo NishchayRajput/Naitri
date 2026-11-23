@@ -2,12 +2,16 @@
 @import "tw-animate-css";
 
 /*
- * Naitri — dark cinematic design system.
+ * Naitri — "Signal" design system.
  *
- * The product is video. Everything that is not video is deliberately dark and
- * low-contrast so the tiles are the brightest thing on screen. There is no
- * light theme: a light chrome around video tiles creates glare and makes faces
- * harder to read, which is the opposite of what a meeting UI should do.
+ * Near-black ink chrome with a single electric-lime accent. Lime is both the
+ * brand colour and the "live" colour: a speaking ring, the primary action and
+ * the live indicator are the same hue, so the eye learns one rule — lime means
+ * something is happening.
+ *
+ * Everything that is not video stays dark and quiet so the tiles are the
+ * brightest thing on screen. There is no light theme: light chrome around video
+ * creates glare and makes faces harder to read.
  */
 
 @theme inline {
@@ -41,64 +45,78 @@
   --color-live: var(--live);
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-signal-teal: var(--signal-teal);
+  --color-hand: var(--hand);
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
 
   --radius-sm: calc(var(--radius) - 6px);
   --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 6px);
-  --radius-2xl: calc(var(--radius) + 14px);
+  --radius-2xl: calc(var(--radius) + 12px);
+  --radius-3xl: calc(var(--radius) + 20px);
 
-  --animate-rise: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-rise: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-fade: fade 0.4s ease both;
-  --animate-pop: pop 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-drift: drift 24s ease-in-out infinite;
+  --animate-pop: pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-float-slow: float 9s ease-in-out infinite;
   --animate-shimmer: shimmer 2.4s linear infinite;
   --animate-pulse-ring: pulse-ring 1.6s ease-out infinite;
+  --animate-wave: wave 1.8s ease-in-out infinite;
+  --animate-blink: blink 1.4s ease-in-out infinite;
 }
 
 :root {
   --radius: 0.875rem;
 
-  /* Near-black with a faint blue cast: pure #000 reads as a dead panel and
-     shows banding on OLED gradients. */
-  --canvas: oklch(0.145 0.012 265);
-  --surface: oklch(0.192 0.014 265);
-  --surface-high: oklch(0.238 0.016 265);
-  --stroke: oklch(1 0 0 / 8%);
-  --stroke-strong: oklch(1 0 0 / 16%);
+  /* Neutral ink with the faintest cool cast; pure #000 reads as a dead
+     panel and bands on OLED gradients. */
+  --canvas: oklch(0.135 0.004 260);
+  --surface: oklch(0.175 0.005 260);
+  --surface-high: oklch(0.215 0.006 260);
+  --stroke: oklch(1 0 0 / 7%);
+  --stroke-strong: oklch(1 0 0 / 14%);
 
   --background: var(--canvas);
-  --foreground: oklch(0.97 0.004 265);
+  --foreground: oklch(0.975 0.003 260);
 
   --card: var(--surface);
   --card-foreground: var(--foreground);
-  --popover: oklch(0.21 0.015 265);
+  --popover: oklch(0.2 0.006 260);
   --popover-foreground: var(--foreground);
 
-  --brand: oklch(0.66 0.206 283);
-  --brand-soft: oklch(0.66 0.206 283 / 16%);
+  /* Electric lime. Text on it is dark ink, never white. */
+  --brand: oklch(0.9 0.19 125);
+  --brand-soft: oklch(0.9 0.19 125 / 14%);
+  --brand-ink: oklch(0.2 0.04 130);
   --primary: var(--brand);
-  --primary-foreground: oklch(0.99 0 0);
+  --primary-foreground: var(--brand-ink);
+
+  /* Secondary glow colour for ambient light only, never for UI meaning. */
+  --signal-teal: oklch(0.72 0.12 195);
 
   --secondary: var(--surface-high);
   --secondary-foreground: var(--foreground);
 
   --muted: var(--surface-high);
-  --muted-foreground: oklch(0.68 0.012 265);
+  --muted-foreground: oklch(0.7 0.008 260);
 
   --accent: var(--surface-high);
   --accent-foreground: var(--foreground);
 
-  --destructive: oklch(0.62 0.224 24);
+  --destructive: oklch(0.66 0.21 22);
   --destructive-foreground: oklch(0.99 0 0);
 
-  --live: oklch(0.76 0.18 155);
+  --live: var(--brand);
+  --hand: oklch(0.84 0.16 80);
 
   --border: var(--stroke);
-  --input: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 9%);
   --ring: var(--brand);
 }
 
@@ -113,13 +131,13 @@
   }
 
   body {
-    @apply bg-canvas text-foreground antialiased;
-    font-feature-settings: "cv11", "ss01";
+    @apply bg-canvas font-sans text-foreground antialiased;
+    font-feature-settings: "ss01", "cv11";
     text-rendering: optimizeLegibility;
   }
 
   ::selection {
-    background: var(--brand-soft);
+    background: oklch(0.9 0.19 125 / 30%);
     color: var(--foreground);
   }
 
@@ -148,23 +166,30 @@
   }
 }
 
+/* Registered so the conic border can animate its angle smoothly. */
+@property --border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
 @layer utilities {
-  /* Frosted panel used by the control bar, side panels and dialogs. */
+  /* Frosted panels: the control dock, side panels, dialogs. */
   .glass {
-    background: color-mix(in oklab, var(--surface) 72%, transparent);
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    background: color-mix(in oklab, var(--surface) 70%, transparent);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
     border: 1px solid var(--stroke);
   }
 
   .glass-high {
-    background: color-mix(in oklab, var(--surface-high) 78%, transparent);
-    backdrop-filter: blur(28px) saturate(170%);
-    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    background: color-mix(in oklab, var(--surface-high) 74%, transparent);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
     border: 1px solid var(--stroke-strong);
   }
 
-  /* A hairline top highlight sells the idea of a lit edge on a dark surface. */
+  /* A hairline top highlight sells a lit edge on a dark surface. */
   .lit-edge {
     position: relative;
   }
@@ -173,58 +198,76 @@
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    padding-top: 1px;
-    background: linear-gradient(
-      to bottom,
-      oklch(1 0 0 / 14%),
-      transparent 42%
-    );
+    padding: 1px;
+    background: linear-gradient(to bottom, oklch(1 0 0 / 16%), transparent 40%);
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
   }
 
-  .text-gradient {
-    background: linear-gradient(
-      100deg,
-      oklch(0.98 0.004 265) 10%,
-      oklch(0.74 0.17 285) 55%,
-      oklch(0.80 0.13 215) 95%
+  /* Slowly rotating lime/teal border, used once per screen for the hero. */
+  .signal-border {
+    position: relative;
+    isolation: isolate;
+  }
+  .signal-border::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from var(--border-angle),
+      transparent 0deg,
+      oklch(0.9 0.19 125 / 90%) 60deg,
+      oklch(0.72 0.12 195 / 70%) 120deg,
+      transparent 180deg,
+      transparent 360deg
     );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: border-spin 6s linear infinite;
+    pointer-events: none;
+  }
+
+  /* background-image, not the `background` shorthand: the CSS optimiser
+     emits colour-space fallbacks that repeat the declaration, and a repeated
+     shorthand resets background-clip and paints a solid block. */
+  .text-signal {
+    background-image: linear-gradient(100deg, var(--brand) 20%, oklch(0.86 0.14 160) 60%, var(--signal-teal) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
 
-  /* Soft aurora wash behind the landing and lobby screens. */
-  .aurora {
+  /* Ambient light behind the landing and lobby: two soft pools of colour
+     plus a fine dot grid that fades out toward the edges. */
+  .ambient {
     position: absolute;
     inset: 0;
     overflow: hidden;
     pointer-events: none;
   }
-  .aurora::before,
-  .aurora::after {
+  .ambient::before {
     content: "";
     position: absolute;
-    width: 46rem;
-    height: 46rem;
-    border-radius: 50%;
-    filter: blur(120px);
-    opacity: 0.5;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 45% at 18% 0%, oklch(0.9 0.19 125 / 11%), transparent 70%),
+      radial-gradient(ellipse 50% 50% at 95% 30%, oklch(0.72 0.12 195 / 12%), transparent 70%),
+      radial-gradient(ellipse 70% 40% at 50% 110%, oklch(0.9 0.19 125 / 6%), transparent 70%);
   }
-  .aurora::before {
-    background: radial-gradient(circle, oklch(0.55 0.21 283 / 55%), transparent 65%);
-    top: -16rem;
-    left: -10rem;
-    animation: drift 26s ease-in-out infinite;
-  }
-  .aurora::after {
-    background: radial-gradient(circle, oklch(0.56 0.16 215 / 45%), transparent 65%);
-    bottom: -20rem;
-    right: -12rem;
-    animation: drift 34s ease-in-out infinite reverse;
+  .ambient::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(oklch(1 0 0 / 9%) 1px, transparent 1px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(ellipse 75% 60% at 50% 30%, #000 20%, transparent 75%);
+    mask-image: radial-gradient(ellipse 75% 60% at 50% 30%, #000 20%, transparent 75%);
   }
 
   /* Film grain removes the plasticky flatness of large dark gradients. */
@@ -233,8 +276,22 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.025;
+    opacity: 0.03;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Lime glow for whoever is speaking. */
+  .speaking-glow {
+    box-shadow:
+      0 0 0 2px var(--brand),
+      0 0 0 6px oklch(0.9 0.19 125 / 14%),
+      0 0 48px -8px oklch(0.9 0.19 125 / 50%);
+  }
+
+  .shadow-float {
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 5%) inset,
+      0 24px 60px -18px rgb(0 0 0 / 0.85);
   }
 
   .no-scrollbar::-webkit-scrollbar {
@@ -243,12 +300,16 @@
   .no-scrollbar {
     scrollbar-width: none;
   }
+
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -276,16 +337,13 @@
   }
 }
 
-@keyframes drift {
+@keyframes float {
   0%,
   100% {
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translateY(0);
   }
-  33% {
-    transform: translate3d(6rem, 3rem, 0) scale(1.12);
-  }
-  66% {
-    transform: translate3d(-4rem, 5rem, 0) scale(0.95);
+  50% {
+    transform: translateY(-10px);
   }
 }
 
@@ -300,18 +358,61 @@
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 oklch(0.76 0.18 155 / 45%);
+    box-shadow: 0 0 0 0 oklch(0.9 0.19 125 / 50%);
   }
   70% {
-    box-shadow: 0 0 0 10px oklch(0.76 0.18 155 / 0%);
+    box-shadow: 0 0 0 12px oklch(0.9 0.19 125 / 0%);
   }
   100% {
-    box-shadow: 0 0 0 0 oklch(0.76 0.18 155 / 0%);
+    box-shadow: 0 0 0 0 oklch(0.9 0.19 125 / 0%);
   }
 }
 
-/* Respect users who ask the OS to reduce motion: the aurora and grain are
-   decorative and genuinely uncomfortable for some vestibular conditions. */
+/* Audio-level bars: each bar runs the same loop with a different delay. */
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes wave {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10%,
+  30% {
+    transform: rotate(14deg);
+  }
+  20%,
+  40% {
+    transform: rotate(-8deg);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes border-spin {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+/* Respect users who ask the OS to reduce motion: the floating, spinning and
+   waving are decorative and genuinely uncomfortable for some people. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

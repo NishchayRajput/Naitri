@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { listDevices, saveDevicePreferences, type DeviceOption, type DevicePreferences } from "@/lib/devices"
 import { DeviceSelect } from "./DeviceSelect"
-import { Camera, Mic, X } from "lucide-react"
+import { Camera, Mic, Settings2, X } from "lucide-react"
 
 export function SettingsSheet({
   open,
@@ -60,15 +60,23 @@ export function SettingsSheet({
         role="dialog"
         aria-modal="true"
         aria-label="Meeting settings"
-        className="glass-high lit-edge relative w-full max-w-md rounded-2xl p-5 shadow-2xl animate-pop"
+        className="glass-high lit-edge relative w-full max-w-md rounded-[28px] p-6 shadow-float animate-pop"
       >
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">Settings</h2>
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-xl bg-brand/12 text-brand">
+              <Settings2 className="size-[18px]" />
+            </span>
+            <div>
+              <h2 className="text-[17px] font-semibold tracking-tight text-foreground">Settings</h2>
+              <p className="text-[12px] text-muted-foreground">Audio and video devices</p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close settings"
-            className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-white/8 hover:text-foreground"
+            className="grid size-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/8 hover:text-foreground"
           >
             <X className="size-4" />
           </button>
@@ -76,7 +84,7 @@ export function SettingsSheet({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">Microphone</span>
+            <span className="text-[12px] font-medium text-muted-foreground">Microphone</span>
             <DeviceSelect
               devices={devices.filter((d) => d.kind === "audioinput")}
               value={current.audioInput}
@@ -88,7 +96,7 @@ export function SettingsSheet({
           </div>
 
           <div className="space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">Camera</span>
+            <span className="text-[12px] font-medium text-muted-foreground">Camera</span>
             <DeviceSelect
               devices={devices.filter((d) => d.kind === "videoinput")}
               value={current.videoInput}
@@ -99,7 +107,7 @@ export function SettingsSheet({
             />
           </div>
 
-          <p className="pt-1 text-[11px] leading-relaxed text-muted-foreground/70">
+          <p className="rounded-2xl bg-white/4 px-4 py-3 text-[12px] leading-relaxed text-muted-foreground">
             Switching devices mid-call replaces the track in place, so nobody
             sees you drop out.
           </p>
