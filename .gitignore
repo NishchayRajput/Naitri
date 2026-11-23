@@ -10,3 +10,5 @@ go.work
 vendor/
 .env
 tmp/.env
+backend/bin/
+tmp/

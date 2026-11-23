@@ -40,6 +40,10 @@ type Room struct {
 	// kept so a track can be detached on unpublish.
 	subs map[string]map[string]*webrtc.RTPSender
 
+	// banned holds user IDs the host removed. Joins are also checked against
+	// the persisted list; this copy closes the race with in-flight joins.
+	banned map[string]struct{}
+
 	maxSize int
 	onEmpty func(code string)
 }
@@ -52,12 +56,39 @@ func NewRoom(code string, info RoomInfo, maxSize int, log *slog.Logger, onEmpty 
 		peers:   make(map[string]*Peer),
 		tracks:  make(map[string]*publishedTrack),
 		subs:    make(map[string]map[string]*webrtc.RTPSender),
+		banned:  make(map[string]struct{}),
 		maxSize: maxSize,
 		onEmpty: onEmpty,
 	}
 }
 
-var ErrRoomFull = errors.New("room is full")
+var (
+	ErrRoomFull = errors.New("room is full")
+	ErrBanned   = errors.New("user was removed from this room")
+)
+
+// Ban records a user as removed and returns every connection they currently
+// hold in the room (they may have several tabs open).
+func (r *Room) Ban(userID string) []*Peer {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.banned[userID] = struct{}{}
+	var out []*Peer
+	for _, p := range r.peers {
+		if p.UserID == userID {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (r *Room) IsBanned(userID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.banned[userID]
+	return ok
+}
 
 func (r *Room) Size() int {
 	r.mu.RLock()
@@ -96,6 +127,10 @@ func (r *Room) TrackInfos() []TrackInfo {
 // AddPeer registers a peer and returns the state it needs for its welcome.
 func (r *Room) AddPeer(p *Peer) error {
 	r.mu.Lock()
+	if _, banned := r.banned[p.UserID]; banned && !p.IsHost {
+		r.mu.Unlock()
+		return ErrBanned
+	}
 	if len(r.peers) >= r.maxSize {
 		r.mu.Unlock()
 		return ErrRoomFull
@@ -203,6 +238,19 @@ func (r *Room) PublishTrack(owner *Peer, remote *webrtc.TrackRemote, receiver *w
 	}
 
 	r.mu.Lock()
+	owned := 0
+	for _, t := range r.tracks {
+		if t.owner.ID == owner.ID {
+			owned++
+		}
+	}
+	if owned >= maxPublishedTracks {
+		r.mu.Unlock()
+		r.log.Warn("peer exceeded published track limit; ignoring track",
+			"peer", owner.ID, "limit", maxPublishedTracks)
+		_ = receiver.Stop()
+		return
+	}
 	r.tracks[trackID] = pt
 	targets := make([]*Peer, 0, len(r.peers))
 	for id, p := range r.peers {
@@ -381,6 +429,24 @@ func (r *Room) Broadcast(typ string, payload any, exceptPeerID string) {
 	// otherwise re-enter the room and deadlock.
 	for _, p := range targets {
 		p.Send(typ, payload)
+	}
+}
+
+// BroadcastLossy is Broadcast for messages a recipient can afford to miss;
+// see Peer.SendLossy.
+func (r *Room) BroadcastLossy(typ string, payload any, exceptPeerID string) {
+	r.mu.RLock()
+	targets := make([]*Peer, 0, len(r.peers))
+	for id, p := range r.peers {
+		if id == exceptPeerID {
+			continue
+		}
+		targets = append(targets, p)
+	}
+	r.mu.RUnlock()
+
+	for _, p := range targets {
+		p.SendLossy(typ, payload)
 	}
 }
 

@@ -111,6 +111,8 @@ func writeRoomError(w http.ResponseWriter, err error) {
 		utils.Error(w, http.StatusNotFound, "room_not_found", err.Error())
 	case errors.Is(err, service.ErrRoomEnded):
 		utils.Error(w, http.StatusGone, "room_ended", err.Error())
+	case errors.Is(err, service.ErrRoomBanned):
+		utils.Error(w, http.StatusForbidden, "removed_from_room", err.Error())
 	case errors.Is(err, service.ErrRoomLocked):
 		utils.Error(w, http.StatusForbidden, "room_locked", err.Error())
 	case errors.Is(err, service.ErrNotRoomHost):

@@ -76,6 +76,21 @@ func (r *RoomRepository) SetLocked(ctx context.Context, code string, locked bool
 	return nil
 }
 
+// Ban adds a user to the room's removed list.
+func (r *RoomRepository) Ban(ctx context.Context, code string, userID bson.ObjectID) error {
+	res, err := r.col.UpdateOne(ctx,
+		bson.M{"code": code},
+		bson.M{"$addToSet": bson.M{"bannedUserIds": userID}},
+	)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *RoomRepository) MarkEnded(ctx context.Context, code string) error {
 	now := time.Now().UTC()
 	_, err := r.col.UpdateOne(ctx,

@@ -8,14 +8,16 @@ import (
 )
 
 type Repository struct {
-	Users *UserRepository
-	Rooms *RoomRepository
+	Users    *UserRepository
+	Rooms    *RoomRepository
+	Sessions *SessionRepository
 }
 
 func New(db *mongo.Database) *Repository {
 	return &Repository{
-		Users: NewUserRepository(db),
-		Rooms: NewRoomRepository(db),
+		Users:    NewUserRepository(db),
+		Rooms:    NewRoomRepository(db),
+		Sessions: NewSessionRepository(db),
 	}
 }
 
@@ -27,6 +29,9 @@ func (r *Repository) EnsureIndexes(ctx context.Context) error {
 	}
 	if err := r.Rooms.EnsureIndexes(ctx); err != nil {
 		return fmt.Errorf("room indexes: %w", err)
+	}
+	if err := r.Sessions.EnsureIndexes(ctx); err != nil {
+		return fmt.Errorf("session indexes: %w", err)
 	}
 	return nil
 }

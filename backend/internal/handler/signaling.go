@@ -80,6 +80,12 @@ func (h *SignalingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Read the stored profile so the display name and colour come from the
 	// database rather than from client-supplied claims.
+	// Fast path for a ban issued moments ago in the live room.
+	if live := h.manager.Room(room.Code); live != nil && live.IsBanned(claims.Subject) && !room.IsHost(userID) {
+		writeRoomError(w, service.ErrRoomBanned)
+		return
+	}
+
 	user, err := h.authSvc.UserByID(r.Context(), claims.Subject)
 	if err != nil {
 		utils.Error(w, http.StatusUnauthorized, "unauthenticated", "Sign in to join this meeting.")

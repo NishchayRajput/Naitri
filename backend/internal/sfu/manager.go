@@ -1,9 +1,14 @@
 package sfu
 
 import (
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/webrtc/v4"
@@ -16,6 +21,8 @@ type Options struct {
 	TURNURL     string
 	TURNUser    string
 	TURNPass    string
+	TURNSecret  string
+	TURNCredTTL time.Duration
 	PublicIP    string
 	MaxRoomSize int
 }
@@ -39,11 +46,17 @@ func NewManager(opts Options, log *slog.Logger) (*Manager, error) {
 		return nil, err
 	}
 
+	if opts.TURNCredTTL <= 0 {
+		opts.TURNCredTTL = 6 * time.Hour
+	}
+
+	// Static servers: STUN always, TURN only when it uses fixed credentials.
+	// With a TURN secret, credentials are minted per peer in ICEServersFor.
 	ice := []webrtc.ICEServer{}
 	if len(opts.STUNURLs) > 0 {
 		ice = append(ice, webrtc.ICEServer{URLs: opts.STUNURLs})
 	}
-	if opts.TURNURL != "" {
+	if opts.TURNURL != "" && opts.TURNSecret == "" {
 		ice = append(ice, webrtc.ICEServer{
 			URLs:       []string{opts.TURNURL},
 			Username:   opts.TURNUser,
@@ -112,6 +125,34 @@ func buildAPI(opts Options) (*webrtc.API, error) {
 }
 
 func (m *Manager) ICEServers() []webrtc.ICEServer { return m.iceServers }
+
+// ICEServersFor returns the ICE servers to hand one user. When a TURN secret
+// is configured it mints credentials in the coturn "TURN REST API" format:
+// username "<expiry-unix>:<userID>", password base64(HMAC-SHA1(secret,
+// username)). They stop working at expiry, so a leaked credential cannot be
+// used to relay traffic indefinitely.
+func (m *Manager) ICEServersFor(userID string) []webrtc.ICEServer {
+	if m.opts.TURNURL == "" || m.opts.TURNSecret == "" {
+		return m.iceServers
+	}
+	username, credential := TURNCredentials(m.opts.TURNSecret, userID, time.Now().Add(m.opts.TURNCredTTL))
+
+	out := make([]webrtc.ICEServer, 0, len(m.iceServers)+1)
+	out = append(out, m.iceServers...)
+	return append(out, webrtc.ICEServer{
+		URLs:       []string{m.opts.TURNURL},
+		Username:   username,
+		Credential: credential,
+	})
+}
+
+// TURNCredentials builds a time-limited TURN username and password.
+func TURNCredentials(secret, userID string, expires time.Time) (username, credential string) {
+	username = strconv.FormatInt(expires.Unix(), 10) + ":" + userID
+	mac := hmac.New(sha1.New, []byte(secret))
+	mac.Write([]byte(username))
+	return username, base64.StdEncoding.EncodeToString(mac.Sum(nil))
+}
 
 // GetOrCreateRoom returns the live room for a code, creating it on first join.
 func (m *Manager) GetOrCreateRoom(code string, info RoomInfo) *Room {

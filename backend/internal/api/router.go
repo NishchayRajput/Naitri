@@ -39,10 +39,15 @@ func NewRouter(
 	authRoutes.HandleFunc("/signup", h.Auth.Signup).Methods(http.MethodPost)
 	authRoutes.HandleFunc("/login", h.Auth.Login).Methods(http.MethodPost)
 	authRoutes.HandleFunc("/refresh", h.Auth.Refresh).Methods(http.MethodPost)
+	authRoutes.HandleFunc("/logout", h.Auth.Logout).Methods(http.MethodPost)
 
 	me := v1.PathPrefix("/auth/me").Subrouter()
 	me.Use(middleware.Authenticated(issuer))
 	me.HandleFunc("", h.Auth.Me).Methods(http.MethodGet)
+
+	v1.Handle("/auth/logout-all",
+		middleware.Authenticated(issuer)(http.HandlerFunc(h.Auth.LogoutAll)),
+	).Methods(http.MethodPost)
 
 	rooms := v1.PathPrefix("/rooms").Subrouter()
 	rooms.Use(middleware.Authenticated(issuer))

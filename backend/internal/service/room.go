@@ -18,6 +18,7 @@ var (
 	ErrRoomEnded    = errors.New("this meeting has ended")
 	ErrRoomLocked   = errors.New("this meeting is locked by the host")
 	ErrNotRoomHost  = errors.New("only the host can do that")
+	ErrRoomBanned   = errors.New("the host removed you from this meeting")
 )
 
 // codeAlphabet omits vowels and look-alike characters (0/o, 1/l/i) so codes
@@ -75,6 +76,9 @@ func (s *RoomService) Resolve(ctx context.Context, code string, userID bson.Obje
 	if room.EndedAt != nil {
 		return nil, ErrRoomEnded
 	}
+	if room.IsBanned(userID) && !room.IsHost(userID) {
+		return nil, ErrRoomBanned
+	}
 	if room.Locked && !room.IsHost(userID) {
 		return nil, ErrRoomLocked
 	}
@@ -93,6 +97,21 @@ func (s *RoomService) SetLocked(ctx context.Context, code string, userID bson.Ob
 		return ErrNotRoomHost
 	}
 	return s.rooms.SetLocked(ctx, room.Code, locked)
+}
+
+// Ban records that the host removed a user, so they cannot rejoin.
+func (s *RoomService) Ban(ctx context.Context, code string, userID string) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("%w: invalid user id", ErrValidation)
+	}
+	if err := s.rooms.Ban(ctx, NormalizeCode(code), oid); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrRoomNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *RoomService) ListByHost(ctx context.Context, hostID bson.ObjectID) ([]model.Room, error) {

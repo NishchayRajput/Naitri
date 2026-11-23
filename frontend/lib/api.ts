@@ -112,6 +112,12 @@ async function refreshAccessToken(): Promise<string | null> {
         body: JSON.stringify({ refreshToken }),
       })
       if (!res.ok) {
+        // Refresh tokens are single-use. If another tab rotated ours first,
+        // it has already stored the new pair in the shared localStorage, so
+        // pick that up instead of signing the user out.
+        const stored = tokenStore.refresh
+        if (stored && stored !== refreshToken) return tokenStore.access
+        if (res.status === 409) return null
         tokenStore.clear()
         onSessionExpired?.()
         return null
@@ -191,6 +197,26 @@ export const api = {
       body: { email, password },
       auth: false,
     })
+  },
+
+  /** Revokes this login's refresh token on the server. Best effort. */
+  async logout(): Promise<void> {
+    const refreshToken = tokenStore.refresh
+    if (!refreshToken) return
+    try {
+      await request<void>("/api/v1/auth/logout", {
+        method: "POST",
+        body: { refreshToken },
+        auth: false,
+      })
+    } catch {
+      // Signing out locally still happens; the token expires on its own.
+    }
+  },
+
+  /** Revokes every login this user holds, on every device. */
+  async logoutEverywhere(): Promise<void> {
+    await request<void>("/api/v1/auth/logout-all", { method: "POST" })
   },
 
   async me(): Promise<User> {

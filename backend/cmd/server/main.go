@@ -69,6 +69,8 @@ func run() error {
 		TURNURL:     cfg.TURNURL,
 		TURNUser:    cfg.TURNUser,
 		TURNPass:    cfg.TURNPass,
+		TURNSecret:  cfg.TURNSecret,
+		TURNCredTTL: cfg.TURNCredTTL,
 		PublicIP:    cfg.PublicIP,
 		MaxRoomSize: cfg.MaxRoomSize,
 	}, log)
@@ -84,10 +86,15 @@ func run() error {
 			}
 			return svc.Room.SetLocked(ctx, code, room.HostID, locked)
 		},
+		OnBan: func(ctx context.Context, code string, userID string) error {
+			return svc.Room.Ban(ctx, code, userID)
+		},
 	})
 
 	if cfg.TURNURL == "" {
 		log.Warn("no TURN server configured; clients behind symmetric NAT will fail to connect")
+	} else if cfg.TURNSecret == "" {
+		log.Warn("TURN uses static credentials, which every signed-in user receives; set TURN_SECRET for time-limited credentials")
 	}
 
 	handlers := handler.New(svc, manager, issuer, cfg.AllowedOrigins, log)

@@ -33,7 +33,7 @@ func TestVerifyRoundTrip(t *testing.T) {
 func TestVerifyRejectsWrongKind(t *testing.T) {
 	iss := newTestIssuer()
 
-	refresh, err := iss.RefreshToken("user-1", "a@b.com", "Ada")
+	refresh, err := iss.RefreshToken("user-1", "a@b.com", "Ada", "jti-1", "fam-1")
 	if err != nil {
 		t.Fatalf("mint: %v", err)
 	}

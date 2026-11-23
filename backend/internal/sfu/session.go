@@ -28,6 +28,9 @@ type Identity struct {
 // layer, which would create an import cycle.
 type Hooks struct {
 	OnLockChange func(ctx context.Context, code string, locked bool) error
+	// OnBan persists a host's removal of a user, so they stay out of the
+	// meeting even after everyone leaves and the in-memory room is gone.
+	OnBan func(ctx context.Context, code string, userID string) error
 }
 
 func (m *Manager) SetHooks(h Hooks) { m.hooks = h }
@@ -40,7 +43,8 @@ func (m *Manager) Join(conn *websocket.Conn, room *Room, id Identity) {
 	peerID := uuid.NewString()
 	log := m.log.With("room", room.Code, "peer", peerID)
 
-	cfg := webrtc.Configuration{ICEServers: m.iceServers}
+	iceServers := m.ICEServersFor(id.UserID)
+	cfg := webrtc.Configuration{ICEServers: iceServers}
 
 	publisher, err := m.api.NewPeerConnection(cfg)
 	if err != nil {
@@ -74,6 +78,7 @@ func (m *Manager) Join(conn *websocket.Conn, room *Room, id Identity) {
 		cancel:       cancel,
 		state:        PeerState{MicOn: true, CamOn: true},
 		trackSources: make(map[string]TrackSource),
+		limits:       newPeerLimits(),
 	}
 
 	m.wirePeerConnections(peer, room)
@@ -88,7 +93,11 @@ func (m *Manager) Join(conn *websocket.Conn, room *Room, id Identity) {
 	go peer.writePump()
 
 	if err := room.AddPeer(peer); err != nil {
-		peer.SendError("room_full", "This meeting is full.", true)
+		if errors.Is(err, ErrBanned) {
+			peer.SendError("removed_by_host", "The host removed you from this meeting.", true)
+		} else {
+			peer.SendError("room_full", "This meeting is full.", true)
+		}
 		// Give the write pump a moment to flush the reason before teardown.
 		time.Sleep(100 * time.Millisecond)
 		peer.Close()
@@ -99,7 +108,7 @@ func (m *Manager) Join(conn *websocket.Conn, room *Room, id Identity) {
 		Self:         peer.Participant(),
 		Room:         room.Info,
 		Participants: otherParticipants(room, peerID),
-		ICEServers:   m.iceServers,
+		ICEServers:   iceServers,
 		Tracks:       room.TrackInfos(),
 	})
 
@@ -183,9 +192,26 @@ func (m *Manager) readPump(peer *Peer, room *Room) {
 			return
 		}
 
+		// A client that blows through the overall budget is not a browser
+		// behaving normally; disconnect it instead of letting it degrade the
+		// room for everyone else.
+		if !peer.limits.overall.Allow() {
+			peer.log.Warn("signaling rate limit exceeded, disconnecting")
+			peer.SendError("rate_limited", "Too many messages. You have been disconnected.", true)
+			return
+		}
+		if l := peer.limits.forType(msg.Type); l != nil && !l.Allow() {
+			if peer.limits.errors.Allow() {
+				peer.SendError("rate_limited", "You're sending messages too quickly.", false)
+			}
+			continue
+		}
+
 		if err := m.handle(peer, room, msg); err != nil {
 			peer.log.Warn("handle signaling message", "type", msg.Type, "error", err)
-			peer.SendError("signaling_error", "Could not process that request.", false)
+			if peer.limits.errors.Allow() {
+				peer.SendError("signaling_error", "Could not process that request.", false)
+			}
 		}
 	}
 }
@@ -202,7 +228,9 @@ func (m *Manager) handle(peer *Peer, room *Room, msg Message) error {
 			return err
 		}
 		// Recorded first: OnTrack fires from within SetRemoteDescription.
-		peer.recordSources(p.Tracks)
+		if err := peer.recordSources(p.Tracks); err != nil {
+			return err
+		}
 		return peer.HandlePublisherOffer(p.SDP)
 
 	case TypeSubscriberAnswer:
@@ -228,7 +256,7 @@ func (m *Manager) handle(peer *Peer, room *Room, msg Message) error {
 			return err
 		}
 		peer.SetState(state)
-		room.Broadcast(TypePeerState,
+		room.BroadcastLossy(TypePeerState,
 			PeerStatePayload{PeerID: peer.ID, State: state}, peer.ID)
 		return nil
 
@@ -246,7 +274,7 @@ func (m *Manager) handle(peer *Peer, room *Room, msg Message) error {
 		}
 		// Echoed to the sender too, so message ordering and timestamps are
 		// server-authoritative and identical for everyone.
-		room.Broadcast(TypeChat, ChatMessage{
+		room.BroadcastLossy(TypeChat, ChatMessage{
 			ID:          uuid.NewString(),
 			PeerID:      peer.ID,
 			Name:        peer.Name,
@@ -291,16 +319,31 @@ func (m *Manager) handle(peer *Peer, room *Room, msg Message) error {
 		if target == nil {
 			return nil
 		}
-		target.Send(TypeRemoved, ErrorPayload{
-			Code:    "removed_by_host",
-			Message: "The host removed you from the meeting.",
-			Fatal:   true,
-		})
-		// Let the notice flush before closing the socket under it.
-		go func() {
-			time.Sleep(200 * time.Millisecond)
-			target.Close()
-		}()
+		// The host's own other tabs share their user ID; never ban that.
+		if target.IsHost || target.UserID == peer.UserID {
+			return nil
+		}
+
+		// Ban the user, not just this connection, or they could simply
+		// reconnect. Persist first so the ban outlives the in-memory room.
+		if m.hooks.OnBan != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := m.hooks.OnBan(ctx, room.Code, target.UserID); err != nil {
+				return err
+			}
+		}
+		for _, victim := range room.Ban(target.UserID) {
+			victim.Send(TypeRemoved, ErrorPayload{
+				Code:    "removed_by_host",
+				Message: "The host removed you from the meeting.",
+				Fatal:   true,
+			})
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				victim.Close()
+			}()
+		}
 		return nil
 
 	default:

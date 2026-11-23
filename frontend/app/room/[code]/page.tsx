@@ -37,7 +37,9 @@ export default function RoomPage() {
         const apiErr = err instanceof ApiError ? err : null
         setResolveError({
           title:
-            apiErr?.code === "room_locked"
+            apiErr?.code === "removed_from_room"
+              ? "You were removed from this meeting"
+              : apiErr?.code === "room_locked"
               ? "This meeting is locked"
               : apiErr?.code === "room_ended"
                 ? "This meeting has ended"

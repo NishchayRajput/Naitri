@@ -6,19 +6,31 @@ import (
 	"fmt"
 	"net/mail"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/nishchayrajput/naitri/internal/auth"
 	"github.com/nishchayrajput/naitri/internal/model"
 	"github.com/nishchayrajput/naitri/internal/repository"
 	"github.com/nishchayrajput/naitri/internal/utils"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 var (
 	ErrInvalidCredentials = errors.New("incorrect email or password")
 	ErrEmailTaken         = errors.New("an account with that email already exists")
 	ErrValidation         = errors.New("validation failed")
+	// ErrRefreshSuperseded means another tab or request rotated this refresh
+	// token moments ago. It is not treated as theft; the caller should pick up
+	// the newer token pair instead of signing the user out.
+	ErrRefreshSuperseded = errors.New("refresh token was just rotated")
 )
+
+// reuseGrace is how long after rotation an old refresh token may be presented
+// again without being treated as stolen. Several tabs share one token store,
+// so two of them refreshing at once is normal, not an attack.
+const reuseGrace = 30 * time.Second
 
 const (
 	minPasswordLen = 8
@@ -34,12 +46,13 @@ var avatarPalette = []string{
 }
 
 type AuthService struct {
-	users  *repository.UserRepository
-	issuer *auth.Issuer
+	users    *repository.UserRepository
+	sessions *repository.SessionRepository
+	issuer   *auth.Issuer
 }
 
-func NewAuthService(users *repository.UserRepository, issuer *auth.Issuer) *AuthService {
-	return &AuthService{users: users, issuer: issuer}
+func NewAuthService(users *repository.UserRepository, sessions *repository.SessionRepository, issuer *auth.Issuer) *AuthService {
+	return &AuthService{users: users, sessions: sessions, issuer: issuer}
 }
 
 type TokenPair struct {
@@ -84,7 +97,7 @@ func (s *AuthService) Signup(ctx context.Context, name, email, password string) 
 		return nil, err
 	}
 
-	return s.mintTokens(user)
+	return s.mintTokens(ctx, user, "")
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (*TokenPair, error) {
@@ -103,14 +116,38 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Token
 		return nil, ErrInvalidCredentials
 	}
 
-	return s.mintTokens(user)
+	return s.mintTokens(ctx, user, "")
 }
 
 // Refresh exchanges a valid refresh token for a new token pair, re-reading the
 // user so a deleted or renamed account is reflected immediately.
+// Refresh exchanges a refresh token for a new pair. Each refresh token works
+// exactly once: it is rotated on use, and presenting an already-rotated token
+// (outside a short grace window) revokes the whole login, because only a thief
+// or a replayed request would hold a token the client already replaced.
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenPair, error) {
 	claims, err := s.issuer.Verify(refreshToken, auth.KindRefresh)
-	if err != nil {
+	if err != nil || claims.ID == "" || claims.Family == "" {
+		// Tokens minted before rotation existed carry no jti and cannot be
+		// revoked, so they are no longer accepted.
+		return nil, ErrInvalidCredentials
+	}
+
+	session, err := s.sessions.Consume(ctx, claims.ID)
+	switch {
+	case errors.Is(err, repository.ErrSessionUsed):
+		if session.UsedAt != nil && time.Since(*session.UsedAt) < reuseGrace {
+			return nil, ErrRefreshSuperseded
+		}
+		_ = s.sessions.RevokeFamily(ctx, session.Family)
+		return nil, ErrInvalidCredentials
+	case errors.Is(err, repository.ErrNotFound):
+		return nil, ErrInvalidCredentials
+	case err != nil:
+		return nil, err
+	}
+
+	if session.UserID.Hex() != claims.Subject || session.Family != claims.Family {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -119,23 +156,58 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenP
 		return nil, ErrInvalidCredentials
 	}
 
-	return s.mintTokens(user)
+	return s.mintTokens(ctx, user, session.Family)
+}
+
+// Logout revokes the login the refresh token belongs to. It succeeds for any
+// token that verifies, even an already-rotated one, so a client can always
+// end its own session. Invalid tokens are ignored: there is nothing to revoke.
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	claims, err := s.issuer.Verify(refreshToken, auth.KindRefresh)
+	if err != nil || claims.Family == "" {
+		return nil
+	}
+	return s.sessions.RevokeFamily(ctx, claims.Family)
+}
+
+// LogoutEverywhere revokes every refresh token the user holds.
+func (s *AuthService) LogoutEverywhere(ctx context.Context, userID string) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+	return s.sessions.RevokeUser(ctx, oid)
 }
 
 func (s *AuthService) UserByID(ctx context.Context, id string) (*model.User, error) {
 	return s.users.ByID(ctx, id)
 }
 
-func (s *AuthService) mintTokens(user *model.User) (*TokenPair, error) {
+// mintTokens issues a token pair and records the refresh token server-side.
+// An empty family starts a new login; a non-empty one continues a rotation.
+func (s *AuthService) mintTokens(ctx context.Context, user *model.User, family string) (*TokenPair, error) {
 	id := user.ID.Hex()
+	if family == "" {
+		family = uuid.NewString()
+	}
+	tokenID := uuid.NewString()
 
 	access, err := s.issuer.AccessToken(id, user.Email, user.Name)
 	if err != nil {
 		return nil, fmt.Errorf("sign access token: %w", err)
 	}
-	refresh, err := s.issuer.RefreshToken(id, user.Email, user.Name)
+	refresh, err := s.issuer.RefreshToken(id, user.Email, user.Name, tokenID, family)
 	if err != nil {
 		return nil, fmt.Errorf("sign refresh token: %w", err)
+	}
+
+	if err := s.sessions.Create(ctx, &repository.RefreshSession{
+		ID:        tokenID,
+		Family:    family,
+		UserID:    user.ID,
+		ExpiresAt: time.Now().UTC().Add(s.issuer.RefreshTTL()),
+	}); err != nil {
+		return nil, fmt.Errorf("store refresh session: %w", err)
 	}
 
 	return &TokenPair{

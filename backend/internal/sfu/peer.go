@@ -21,6 +21,22 @@ const (
 	pongWait   = 60 * time.Second
 	pingPeriod = (pongWait * 9) / 10
 	maxMessage = 256 * 1024
+
+	// Hard caps on per-peer state a client controls, so one connection
+	// cannot grow server memory without bound.
+	maxPendingCandidates = 64
+	maxTrackSources      = 32
+
+	// maxMediaSections bounds the m-lines in one publisher offer. Browsers
+	// keep an inactive m-line each time a track is removed, so toggling screen
+	// share grows the offer; this leaves ample room for that.
+	maxMediaSections = 128
+
+	// maxPublishedTracks bounds how many tracks one peer may publish at once.
+	// Every published track is forwarded to every other participant, so this
+	// caps how much load a single client can multiply. Camera, microphone,
+	// screen and screen audio need four; the rest is slack for transitions.
+	maxPublishedTracks = 8
 )
 
 // Peer is one participant's full server-side state: the signaling socket plus
@@ -72,6 +88,8 @@ type Peer struct {
 	negotiating    bool
 	negotiateAgain bool
 
+	limits *peerLimits
+
 	closeOnce sync.Once
 }
 
@@ -115,6 +133,25 @@ func (p *Peer) Send(typ string, payload any) {
 	default:
 		p.log.Warn("send queue full, dropping peer", "peer", p.ID)
 		p.Close()
+	}
+}
+
+// SendLossy queues a message the recipient can afford to miss (chat, presence
+// state). If the recipient's queue is full the message is dropped for them,
+// rather than disconnecting them: a full queue here is far more likely to be
+// caused by someone else flooding the room than by this peer being dead.
+func (p *Peer) SendLossy(typ string, payload any) {
+	msg, err := newMessage(typ, payload)
+	if err != nil {
+		p.log.Error("marshal outbound message", "type", typ, "error", err)
+		return
+	}
+
+	select {
+	case p.send <- msg:
+	case <-p.ctx.Done():
+	default:
+		p.log.Debug("send queue full, dropping lossy message", "type", typ)
 	}
 }
 
@@ -164,12 +201,18 @@ func (p *Peer) addCandidate(target Target, cand webrtc.ICECandidateInit) error {
 	switch target {
 	case TargetPublisher:
 		if !p.pubRemoteSet {
+			if len(p.pubPending) >= maxPendingCandidates {
+				return errors.New("too many pending publisher candidates")
+			}
 			p.pubPending = append(p.pubPending, cand)
 			return nil
 		}
 		return p.publisher.AddICECandidate(cand)
 	case TargetSubscriber:
 		if !p.subRemoteSet {
+			if len(p.subPending) >= maxPendingCandidates {
+				return errors.New("too many pending subscriber candidates")
+			}
 			p.subPending = append(p.subPending, cand)
 			return nil
 		}
@@ -214,21 +257,38 @@ func (p *Peer) SourceFor(trackID string, kind webrtc.RTPCodecType) TrackSource {
 	return ParseSource(src, kind)
 }
 
-func (p *Peer) recordSources(sources map[string]TrackSource) {
+// recordSources replaces the track-source map with the one sent alongside a
+// publisher offer. The client always sends the full map for its current
+// tracks, so replacing (rather than merging) keeps it bounded.
+func (p *Peer) recordSources(sources map[string]TrackSource) error {
+	if len(sources) > maxTrackSources {
+		return errors.New("too many tracks in offer")
+	}
 	if len(sources) == 0 {
-		return
+		return nil
+	}
+	next := make(map[string]TrackSource, len(sources))
+	for id, src := range sources {
+		next[id] = src
 	}
 	p.srcMu.Lock()
-	defer p.srcMu.Unlock()
-	if p.trackSources == nil {
-		p.trackSources = make(map[string]TrackSource, len(sources))
-	}
-	for id, src := range sources {
-		p.trackSources[id] = src
-	}
+	p.trackSources = next
+	p.srcMu.Unlock()
+	return nil
 }
 
 func (p *Peer) HandlePublisherOffer(sdp webrtc.SessionDescription) error {
+	if sdp.Type != webrtc.SDPTypeOffer {
+		return errors.New("publisher description must be an offer")
+	}
+	parsed, err := sdp.Unmarshal()
+	if err != nil {
+		return err
+	}
+	if len(parsed.MediaDescriptions) > maxMediaSections {
+		return errors.New("too many media sections in offer")
+	}
+
 	if err := p.publisher.SetRemoteDescription(sdp); err != nil {
 		return err
 	}
@@ -249,6 +309,9 @@ func (p *Peer) HandlePublisherOffer(sdp webrtc.SessionDescription) error {
 // HandleSubscriberAnswer completes a server-initiated offer and immediately
 // starts another round if the track set changed while this one was in flight.
 func (p *Peer) HandleSubscriberAnswer(sdp webrtc.SessionDescription) error {
+	if sdp.Type != webrtc.SDPTypeAnswer {
+		return errors.New("subscriber description must be an answer")
+	}
 	if err := p.subscriber.SetRemoteDescription(sdp); err != nil {
 		return err
 	}

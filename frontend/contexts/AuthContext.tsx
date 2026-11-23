@@ -75,6 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    // Revoke server-side before clearing, since the call needs the token.
+    void api.logout()
     tokenStore.clear()
     setUser(null)
     router.push("/")

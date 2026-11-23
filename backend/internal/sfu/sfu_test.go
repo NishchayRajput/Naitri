@@ -33,6 +33,7 @@ type testClient struct {
 	remote   chan *webrtc.TrackRemote
 	chatMsgs chan ChatMessage
 	peerLeft chan string
+	errs     chan ErrorPayload
 
 	writeMu sync.Mutex
 	closed  chan struct{}
@@ -66,6 +67,7 @@ func dialClient(t *testing.T, url string) *testClient {
 		remote:   make(chan *webrtc.TrackRemote, 8),
 		chatMsgs: make(chan ChatMessage, 8),
 		peerLeft: make(chan string, 8),
+		errs:     make(chan ErrorPayload, 64),
 		closed:   make(chan struct{}),
 	}
 
@@ -162,6 +164,15 @@ func (c *testClient) readLoop() {
 			if json.Unmarshal(msg.Payload, &p) == nil {
 				select {
 				case c.chatMsgs <- p:
+				default:
+				}
+			}
+
+		case TypeError, TypeRemoved:
+			var p ErrorPayload
+			if json.Unmarshal(msg.Payload, &p) == nil {
+				select {
+				case c.errs <- p:
 				default:
 				}
 			}
