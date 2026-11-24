@@ -4,7 +4,7 @@ import { useState } from "react"
 import { cn } from "@/lib/utils"
 import {
   Mic, MicOff, Video, VideoOff, MonitorUp, MonitorX, MoreHorizontal,
-  MessageSquare, Users, Hand, PhoneOff, Settings2, Lock, Unlock,
+  MessageSquare, Users, Hand, PhoneOff, Presentation, Settings2, Lock, Unlock,
 } from "lucide-react"
 
 interface ControlBarProps {
@@ -13,6 +13,7 @@ interface ControlBarProps {
   isSharing: boolean
   handRaised: boolean
   locked: boolean
+  boardOpen: boolean
   isHost: boolean
   participantCount: number
   unreadCount: number
@@ -22,6 +23,7 @@ interface ControlBarProps {
   onToggleCam: () => void
   onToggleShare: () => void
   onToggleHand: () => void
+  onToggleBoard: () => void
   onTogglePanel: (panel: "chat" | "people") => void
   onToggleLock: () => void
   onOpenSettings: () => void
@@ -52,6 +54,13 @@ export function ControlBar(props: ControlBarProps) {
           onClick: props.onToggleShare,
         }]
       : []),
+    {
+      key: "board",
+      label: props.boardOpen ? "Close whiteboard" : "Open whiteboard",
+      icon: <Presentation />,
+      active: props.boardOpen,
+      onClick: props.onToggleBoard,
+    },
     {
       key: "hand",
       label: props.handRaised ? "Lower hand" : "Raise hand",

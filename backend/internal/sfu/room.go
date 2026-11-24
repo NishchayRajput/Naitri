@@ -44,6 +44,8 @@ type Room struct {
 	// the persisted list; this copy closes the race with in-flight joins.
 	banned map[string]struct{}
 
+	board *board
+
 	maxSize int
 	onEmpty func(code string)
 }
@@ -57,6 +59,7 @@ func NewRoom(code string, info RoomInfo, maxSize int, log *slog.Logger, onEmpty 
 		tracks:  make(map[string]*publishedTrack),
 		subs:    make(map[string]map[string]*webrtc.RTPSender),
 		banned:  make(map[string]struct{}),
+		board:   newBoard(),
 		maxSize: maxSize,
 		onEmpty: onEmpty,
 	}

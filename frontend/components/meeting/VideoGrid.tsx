@@ -48,7 +48,9 @@ export function VideoGrid({ roster, pinnedPeerId, onTogglePin }: VideoGridProps)
 
 interface StageLayoutProps {
   /** The tile that owns the stage: a screen share or a pinned participant. */
-  stage: { entry: RosterEntry; isScreen: boolean }
+  stage?: { entry: RosterEntry; isScreen: boolean } | null
+  /** Arbitrary stage content (the whiteboard) instead of a video tile. */
+  content?: React.ReactNode
   others: RosterEntry[]
   onTogglePin: (peerId: string) => void
   pinnedPeerId: string | null
@@ -59,11 +61,11 @@ interface StageLayoutProps {
  * presenting or a participant is pinned, because an equal grid makes shared
  * content unreadable.
  */
-export function StageLayout({ stage, others, onTogglePin, pinnedPeerId }: StageLayoutProps) {
+export function StageLayout({ stage, content, others, onTogglePin, pinnedPeerId }: StageLayoutProps) {
   return (
     <div className="flex size-full flex-col gap-3.5 lg:flex-row">
-      <div className="min-h-0 flex-1">
-        <VideoTile
+      <div className="min-h-0 min-w-0 flex-1">
+        {content ?? (stage && <VideoTile
           participant={stage.entry.participant}
           stream={stage.isScreen ? stage.entry.media.screen : stage.entry.media.camera}
           isSelf={stage.entry.isSelf}
@@ -73,7 +75,7 @@ export function StageLayout({ stage, others, onTogglePin, pinnedPeerId }: StageL
             stage.isScreen ? undefined : () => onTogglePin(stage.entry.participant.peerId)
           }
           className="size-full"
-        />
+        />)}
       </div>
 
       {others.length > 0 && (

@@ -34,6 +34,7 @@ type testClient struct {
 	chatMsgs chan ChatMessage
 	peerLeft chan string
 	errs     chan ErrorPayload
+	board    chan Message
 
 	writeMu sync.Mutex
 	closed  chan struct{}
@@ -68,6 +69,7 @@ func dialClient(t *testing.T, url string) *testClient {
 		chatMsgs: make(chan ChatMessage, 8),
 		peerLeft: make(chan string, 8),
 		errs:     make(chan ErrorPayload, 64),
+		board:    make(chan Message, 256),
 		closed:   make(chan struct{}),
 	}
 
@@ -175,6 +177,12 @@ func (c *testClient) readLoop() {
 				case c.errs <- p:
 				default:
 				}
+			}
+
+		case TypeBoardState, TypeBoardStroke, TypeBoardErase, TypeBoardClear, TypeBoardCursor:
+			select {
+			case c.board <- msg:
+			default:
 			}
 
 		case TypePeerLeft:

@@ -6,6 +6,7 @@ import { AudioLevelMonitor } from "@/lib/audio"
 import { getDisplayMedia, getUserMedia, type DevicePreferences } from "@/lib/devices"
 import { RtcTransport, type RemoteTrackEvent } from "@/lib/rtc"
 import { SignalingClient, type SignalingStatus } from "@/lib/signaling"
+import { BoardStore } from "@/lib/whiteboard"
 import type {
   ChatMessage,
   Participant,
@@ -58,6 +59,7 @@ export function useMeeting(opts: UseMeetingOptions) {
   const [camOn, setCamOn] = useState(initialCamOn)
   const [handRaised, setHandRaised] = useState(false)
   const [speaking, setSpeaking] = useState(false)
+  const [boardOpen, setBoardOpen] = useState(false)
 
   // Refs hold everything the socket callbacks touch, so those callbacks never
   // close over stale React state.
@@ -78,6 +80,14 @@ export function useMeeting(opts: UseMeetingOptions) {
     handRaised: false,
     speaking: false,
   })
+
+  // The whiteboard store lives for the whole meeting; it sends through
+  // whichever socket is current, so reconnects need no re-wiring.
+  const boardRef = useRef<BoardStore | null>(null)
+  if (boardRef.current === null) {
+    boardRef.current = new BoardStore((m) => signalingRef.current?.send(m))
+  }
+  const board = boardRef.current
 
   const onFatalRef = useRef(opts.onFatal)
   onFatalRef.current = opts.onFatal
@@ -197,6 +207,9 @@ export function useMeeting(opts: UseMeetingOptions) {
           setSelf(me)
           setRoom(info)
           setParticipants(new Map(others.map((p) => [p.peerId, p])))
+          board.setSelf(me.peerId)
+          board.reset(msg.payload.board)
+          setBoardOpen(Boolean(msg.payload.board?.open))
           // Tracks already live in the room arrive via ontrack; this list is
           // only used to pre-size the grid so tiles do not pop in late.
           void tracks
@@ -237,6 +250,7 @@ export function useMeeting(opts: UseMeetingOptions) {
 
         case "peer-left": {
           const { peerId } = msg.payload
+          board.removePeer(peerId)
           setParticipants((prev) => {
             const next = new Map(prev)
             next.delete(peerId)
@@ -286,11 +300,31 @@ export function useMeeting(opts: UseMeetingOptions) {
           break
         }
 
+        case "board-state":
+          setBoardOpen(msg.payload.open)
+          break
+
+        case "board-stroke":
+          board.applyChunk(msg.payload)
+          break
+
+        case "board-erase":
+          board.applyErase(msg.payload.ids)
+          break
+
+        case "board-clear":
+          board.applyClear()
+          break
+
+        case "board-cursor":
+          board.applyCursor(msg.payload)
+          break
+
         case "pong":
           break
       }
     },
-    [applyRemoteTrack, clearRemoteTrack, syncLocalTracks, publishState],
+    [applyRemoteTrack, clearRemoteTrack, syncLocalTracks, publishState, board],
   )
 
   // ------------------------------------------------------------- connection
@@ -489,6 +523,12 @@ export function useMeeting(opts: UseMeetingOptions) {
     signalingRef.current?.send({ type: "lock", payload: { locked } })
   }, [])
 
+  /** Opens or closes the whiteboard for everyone in the room. */
+  const setBoardVisible = useCallback((open: boolean) => {
+    setBoardOpen(open)
+    signalingRef.current?.send({ type: "board-open", payload: { open } })
+  }, [])
+
   const removePeer = useCallback((peerId: string) => {
     signalingRef.current?.send({ type: "remove-peer", payload: { peerId } })
   }, [])
@@ -530,6 +570,9 @@ export function useMeeting(opts: UseMeetingOptions) {
     },
     [],
   )
+
+  // The store owns timers (stroke flushing, cursor throttling).
+  useEffect(() => () => board.dispose(), [board])
 
   const leave = useCallback(() => {
     signalingRef.current?.close()
@@ -580,6 +623,8 @@ export function useMeeting(opts: UseMeetingOptions) {
     handRaised,
     speaking,
     isSharing: screenStream !== null,
+    board,
+    boardOpen,
     actions: {
       toggleMic,
       toggleCam,
@@ -589,6 +634,7 @@ export function useMeeting(opts: UseMeetingOptions) {
       sendChat,
       setLocked,
       removePeer,
+      setBoardVisible,
       switchDevice,
       leave,
     },

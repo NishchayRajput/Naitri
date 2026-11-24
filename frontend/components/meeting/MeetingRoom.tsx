@@ -11,6 +11,7 @@ import { SettingsSheet } from "./SettingsSheet"
 import { AudioSink } from "./AudioSink"
 import { StageLayout, VideoGrid, type RosterEntry } from "./VideoGrid"
 import { MeetingEnded } from "./MeetingEnded"
+import { Whiteboard, type BoardPeer } from "./Whiteboard"
 import { Check, Link2 } from "lucide-react"
 
 interface MeetingRoomProps {
@@ -124,6 +125,24 @@ export function MeetingRoom({
       : roster.filter((e) => e.participant.peerId !== stage.entry.participant.peerId)
   }, [stage, roster])
 
+  // Names and colours for whiteboard cursors.
+  const boardPeers = useMemo(() => {
+    const m = new Map<string, BoardPeer>()
+    for (const e of roster) {
+      m.set(e.participant.peerId, { name: e.participant.name, color: e.participant.avatarColor })
+    }
+    return m
+  }, [roster])
+
+  // "Board full" is the one whiteboard error worth surfacing; show it briefly.
+  const [boardNotice, setBoardNotice] = useState<string | null>(null)
+  useEffect(() => {
+    if (meeting.error?.code !== "board_full") return
+    setBoardNotice(meeting.error.message)
+    const id = setTimeout(() => setBoardNotice(null), 4000)
+    return () => clearTimeout(id)
+  }, [meeting.error])
+
   const screenShareSupported =
     typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getDisplayMedia)
 
@@ -146,7 +165,7 @@ export function MeetingRoom({
 
       <main className="relative flex min-h-0 flex-1 gap-3 px-3 pb-24 sm:px-4 sm:pb-28">
         <div className="relative min-w-0 flex-1">
-          {roster.length === 1 && roster[0].isSelf && <InviteCard roomCode={roomCode} />}
+          {roster.length === 1 && roster[0].isSelf && !meeting.boardOpen && <InviteCard roomCode={roomCode} />}
           {roster.length === 0 ? (
             <div className="grid size-full place-items-center">
               <div className="flex flex-col items-center gap-4 text-muted-foreground">
@@ -157,6 +176,23 @@ export function MeetingRoom({
                 <span className="text-[14px]">Connecting to the meeting…</span>
               </div>
             </div>
+          ) : meeting.boardOpen ? (
+            // The whiteboard takes the stage for everyone; people stay visible
+            // in the filmstrip.
+            <StageLayout
+              content={
+                <Whiteboard
+                  store={meeting.board}
+                  peers={boardPeers}
+                  roomCode={roomCode}
+                  notice={boardNotice}
+                  onClose={() => actions.setBoardVisible(false)}
+                />
+              }
+              others={roster}
+              onTogglePin={togglePin}
+              pinnedPeerId={pinnedPeerId}
+            />
           ) : stage ? (
             <StageLayout
               stage={stage}
@@ -204,6 +240,7 @@ export function MeetingRoom({
         isSharing={meeting.isSharing}
         handRaised={meeting.handRaised}
         locked={room?.locked ?? false}
+        boardOpen={meeting.boardOpen}
         isHost={self?.isHost ?? false}
         participantCount={roster.length}
         unreadCount={unread}
@@ -213,6 +250,7 @@ export function MeetingRoom({
         onToggleCam={actions.toggleCam}
         onToggleShare={toggleShare}
         onToggleHand={actions.toggleHand}
+        onToggleBoard={() => actions.setBoardVisible(!meeting.boardOpen)}
         onTogglePanel={(p) => setPanel((prev) => (prev === p ? null : p))}
         onToggleLock={() => actions.setLocked(!(room?.locked ?? false))}
         onOpenSettings={() => setSettingsOpen(true)}

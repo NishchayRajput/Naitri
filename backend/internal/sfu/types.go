@@ -113,6 +113,7 @@ type WelcomePayload struct {
 	Participants []Participant      `json:"participants"`
 	ICEServers   []webrtc.ICEServer `json:"iceServers"`
 	Tracks       []TrackInfo        `json:"tracks"`
+	Board        BoardSnapshot      `json:"board"`
 }
 
 type RoomInfo struct {
@@ -128,6 +129,35 @@ type TrackInfo struct {
 	StreamID string      `json:"streamId"`
 	Kind     string      `json:"kind"`
 	Source   TrackSource `json:"source"`
+}
+
+// Whiteboard payloads.
+
+type BoardOpenPayload struct {
+	Open bool `json:"open"`
+}
+
+type BoardStatePayload struct {
+	Open bool   `json:"open"`
+	By   string `json:"by"`
+	Name string `json:"name"`
+}
+
+type BoardErasePayload struct {
+	IDs []string `json:"ids"`
+	By  string   `json:"by,omitempty"`
+}
+
+type BoardClearPayload struct {
+	By   string `json:"by"`
+	Name string `json:"name"`
+}
+
+type BoardCursorPayload struct {
+	PeerID string  `json:"peerId,omitempty"`
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Active bool    `json:"active"`
 }
 
 type PeerStatePayload struct {
@@ -165,6 +195,15 @@ const (
 	TypeLock             = "lock"
 	TypeRemovePeer       = "remove-peer"
 	TypePing             = "ping"
+
+	// Whiteboard; the same names are used in both directions except
+	// board-open (client) / board-state (server).
+	TypeBoardOpen   = "board-open"
+	TypeBoardStroke = "board-stroke"
+	TypeBoardErase  = "board-erase"
+	TypeBoardClear  = "board-clear"
+	TypeBoardCursor = "board-cursor"
+	TypeBoardState  = "board-state"
 
 	// server -> client
 	TypeWelcome          = "welcome"

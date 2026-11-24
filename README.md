@@ -92,6 +92,12 @@ them, so the source cannot ride in the msid from the client. Instead:
   and browsers demux by MID — video would land on the wrong transceiver and be
   dropped silently. Each subscriber's interceptors add transport-wide CC with
   that connection's own IDs.
+- **The whiteboard is shared state on the server, not a video stream.** Each
+  room holds its strokes in memory on a fixed 1600×900 board, so drawings line
+  up on every screen size. Strokes stream in ~50 ms chunks while being drawn, so
+  others watch the line appear live; late joiners get the whole board in their
+  `welcome`. Anyone can open it, draw, erase or clear; it takes the stage for
+  everyone, with cameras in the filmstrip. It disappears when the room empties.
 - **One accent colour, one meaning.** The UI is dark-only with a single lime
   accent that always means "live": the primary action, the speaking ring and
   the live indicator. Everything else stays quiet so video is the brightest
@@ -452,6 +458,11 @@ Every frame is `{ "type": "...", "payload": { ... } }`.
 | `chat`              | Send a message                            |
 | `lock`              | Host only — lock the meeting              |
 | `remove-peer`       | Host only — remove (and ban) a participant |
+| `board-open`        | Open / close the whiteboard for everyone  |
+| `board-stroke`      | Stroke chunk: first carries tool/colour/width, later ones only points |
+| `board-erase`       | Remove strokes by id (also used for undo) |
+| `board-clear`       | Clear the whole board                     |
+| `board-cursor`      | Your pointer position on the board (throttled, lossy) |
 | `ping`              | Heartbeat                                 |
 
 **Server → client**
@@ -466,6 +477,8 @@ Every frame is `{ "type": "...", "payload": { ... } }`.
 | `track-published` / `track-unpublished`    | Media lifecycle     |
 | `chat`              | Broadcast message (echoed to sender)           |
 | `room-locked`       | Lock state changed                             |
+| `board-state`       | Whiteboard opened/closed (and by whom)         |
+| `board-stroke` / `board-erase` / `board-clear` / `board-cursor` | Whiteboard updates from others |
 | `removed` / `error` | `fatal: true` means do not retry               |
 
 The Go types in `backend/internal/sfu/types.go` and the TypeScript types in
@@ -482,10 +495,17 @@ Every socket is rate limited (`backend/internal/sfu/limits.go`):
 | `state`                               | 10/s, 20     | dropped                         |
 | `publisher-offer`, `subscriber-answer`| 2/s, 10      | dropped                         |
 | `lock`, `remove-peer`                 | 2/s, 10      | dropped                         |
+| `board-open`, `-stroke`, `-erase`, `-clear` | 40/s, 80 | dropped                      |
+| `board-cursor`                        | 15/s, 30     | dropped silently                |
 
 Chat and presence are delivered "lossy": if a recipient's send queue is full the
 message is dropped for them rather than disconnecting them, so one person
 flooding a room cannot knock everyone else out.
+
+The whiteboard validates every stroke (tool, `#rrggbb` colour, width 1–48,
+finite points clamped onto the board, only the author can extend a stroke) and
+caps a room at 3,000 strokes / 200,000 points, 5,000 points per stroke and 500
+per chunk. A full board answers `board_full` until someone clears it.
 
 Per peer, the server also caps queued ICE candidates (64 per connection), the
 track-source map (32), media sections per offer (128) and simultaneously
@@ -554,6 +574,9 @@ departure notifications.
 flooding chat is disconnected without affecting anyone else, a removed user
 cannot rejoin, the host cannot be removed, TURN credentials are time-limited and
 static ones are never handed out when a secret is set.
+`internal/sfu/board_test.go` covers whiteboard validation, stroke ownership,
+capacity limits and erase, plus an end-to-end run where strokes stream between
+peers, a late joiner receives the board and a clear reaches everyone.
 `internal/sfu/forward_ext_test.go` guards the header-extension stripping
 described above — Pion test clients do not demux by MID the way browsers do, so
 without it this bug is invisible to the rest of the suite.

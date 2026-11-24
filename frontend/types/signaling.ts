@@ -46,6 +46,47 @@ export interface WelcomePayload {
   participants: Participant[]
   iceServers: RTCIceServer[]
   tracks: TrackInfo[]
+  board: BoardSnapshot
+}
+
+/* ----------------------------------------------------------- whiteboard */
+
+/** Fixed logical board size; clients scale it to fit their screen. */
+export const BOARD_WIDTH = 1600
+export const BOARD_HEIGHT = 900
+
+export type BoardTool = "pen" | "highlighter"
+
+/**
+ * One stroke, or one chunk of a stroke while it is being drawn. The first
+ * chunk carries tool/color/width; later chunks carry only new points.
+ * `points` is flat: [x0, y0, x1, y1, ...] in board units.
+ */
+export interface StrokeChunk {
+  id: string
+  peerId?: string
+  tool?: BoardTool
+  color?: string
+  width?: number
+  points: number[]
+  done: boolean
+}
+
+/** A complete stroke as held on the board. */
+export interface Stroke {
+  id: string
+  peerId: string
+  tool: BoardTool
+  color: string
+  width: number
+  points: number[]
+  done: boolean
+}
+
+export interface BoardSnapshot {
+  open: boolean
+  openedBy?: string
+  strokes: Stroke[]
 }
 
 export interface ChatMessage {
@@ -79,6 +120,11 @@ export type ServerMessage =
   | { type: "removed"; payload: ErrorPayload }
   | { type: "error"; payload: ErrorPayload }
   | { type: "pong"; payload?: never }
+  | { type: "board-state"; payload: { open: boolean; by: string; name: string } }
+  | { type: "board-stroke"; payload: StrokeChunk }
+  | { type: "board-erase"; payload: { ids: string[]; by?: string } }
+  | { type: "board-clear"; payload: { by: string; name: string } }
+  | { type: "board-cursor"; payload: { peerId: string; x: number; y: number; active: boolean } }
 
 /** Messages we send to the server. */
 export type ClientMessage =
@@ -101,6 +147,11 @@ export type ClientMessage =
   | { type: "lock"; payload: { locked: boolean } }
   | { type: "remove-peer"; payload: { peerId: string } }
   | { type: "ping" }
+  | { type: "board-open"; payload: { open: boolean } }
+  | { type: "board-stroke"; payload: StrokeChunk }
+  | { type: "board-erase"; payload: { ids: string[] } }
+  | { type: "board-clear" }
+  | { type: "board-cursor"; payload: { x: number; y: number; active: boolean } }
 
 /**
  * The SFU encodes ownership and intent in the outgoing MediaStream id as

@@ -21,6 +21,10 @@ type peerLimits struct {
 	state     *rate.Limiter
 	negotiate *rate.Limiter
 	host      *rate.Limiter
+	// Drawing streams a stroke chunk every ~50ms, so the board budget sits
+	// well above that; cursors are presence only and dropped when over.
+	board  *rate.Limiter
+	cursor *rate.Limiter
 
 	// errors throttles our own error replies so that answering a flood does
 	// not become a flood.
@@ -29,11 +33,13 @@ type peerLimits struct {
 
 func newPeerLimits() *peerLimits {
 	return &peerLimits{
-		overall:   rate.NewLimiter(50, 200),
+		overall:   rate.NewLimiter(80, 240),
 		chat:      rate.NewLimiter(2, 10),
 		state:     rate.NewLimiter(10, 20),
 		negotiate: rate.NewLimiter(2, 10),
 		host:      rate.NewLimiter(2, 10),
+		board:     rate.NewLimiter(40, 80),
+		cursor:    rate.NewLimiter(15, 30),
 		errors:    rate.NewLimiter(1, 3),
 	}
 }
@@ -50,6 +56,10 @@ func (l *peerLimits) forType(typ string) *rate.Limiter {
 		return l.negotiate
 	case TypeLock, TypeRemovePeer:
 		return l.host
+	case TypeBoardOpen, TypeBoardStroke, TypeBoardErase, TypeBoardClear:
+		return l.board
+	case TypeBoardCursor:
+		return l.cursor
 	}
 	return nil
 }

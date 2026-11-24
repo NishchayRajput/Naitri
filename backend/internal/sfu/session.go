@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -110,6 +111,7 @@ func (m *Manager) Join(conn *websocket.Conn, room *Room, id Identity) {
 		Participants: otherParticipants(room, peerID),
 		ICEServers:   iceServers,
 		Tracks:       room.TrackInfos(),
+		Board:        room.board.snapshot(),
 	})
 
 	// Attach whatever is already being published, then open the subscriber
@@ -201,7 +203,9 @@ func (m *Manager) readPump(peer *Peer, room *Room) {
 			return
 		}
 		if l := peer.limits.forType(msg.Type); l != nil && !l.Allow() {
-			if peer.limits.errors.Allow() {
+			// Cursor positions are superseded by the next one; dropping
+			// them quietly is the right behaviour, not an error.
+			if msg.Type != TypeBoardCursor && peer.limits.errors.Allow() {
 				peer.SendError("rate_limited", "You're sending messages too quickly.", false)
 			}
 			continue
@@ -344,6 +348,68 @@ func (m *Manager) handle(peer *Peer, room *Room, msg Message) error {
 				victim.Close()
 			}()
 		}
+		return nil
+
+	case TypeBoardOpen:
+		var p BoardOpenPayload
+		if err := decodePayload(msg.Payload, &p); err != nil {
+			return err
+		}
+		room.board.setOpen(p.Open, peer.ID)
+		room.Broadcast(TypeBoardState, BoardStatePayload{Open: p.Open, By: peer.ID, Name: peer.Name}, "")
+		return nil
+
+	case TypeBoardStroke:
+		var chunk Stroke
+		if err := decodePayload(msg.Payload, &chunk); err != nil {
+			return err
+		}
+		out, err := room.board.appendStroke(peer.ID, chunk)
+		if errors.Is(err, ErrBoardFull) {
+			if peer.limits.errors.Allow() {
+				peer.SendError("board_full", err.Error(), false)
+			}
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		// The sender already drew it locally; everyone else gets the chunk.
+		room.Broadcast(TypeBoardStroke, out, peer.ID)
+		return nil
+
+	case TypeBoardErase:
+		var p BoardErasePayload
+		if err := decodePayload(msg.Payload, &p); err != nil {
+			return err
+		}
+		if len(p.IDs) == 0 || len(p.IDs) > maxEraseIDs {
+			return errors.New("invalid erase")
+		}
+		if removed := room.board.erase(p.IDs); len(removed) > 0 {
+			room.Broadcast(TypeBoardErase, BoardErasePayload{IDs: removed, By: peer.ID}, peer.ID)
+		}
+		return nil
+
+	case TypeBoardClear:
+		room.board.clear()
+		room.Broadcast(TypeBoardClear, BoardClearPayload{By: peer.ID, Name: peer.Name}, "")
+		return nil
+
+	case TypeBoardCursor:
+		var p BoardCursorPayload
+		if err := decodePayload(msg.Payload, &p); err != nil {
+			return err
+		}
+		if math.IsNaN(p.X) || math.IsNaN(p.Y) || math.IsInf(p.X, 0) || math.IsInf(p.Y, 0) {
+			return errors.New("invalid cursor")
+		}
+		room.BroadcastLossy(TypeBoardCursor, BoardCursorPayload{
+			PeerID: peer.ID,
+			X:      math.Max(0, math.Min(BoardWidth, p.X)),
+			Y:      math.Max(0, math.Min(BoardHeight, p.Y)),
+			Active: p.Active,
+		}, peer.ID)
 		return nil
 
 	default:
