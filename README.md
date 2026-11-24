@@ -17,6 +17,7 @@
 - [Deployment notes](#deployment-notes)
 - [HTTP API](#http-api)
 - [Signaling protocol](#signaling-protocol)
+- [Security](#security)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
 
@@ -85,6 +86,16 @@ them, so the source cannot ride in the msid from the client. Instead:
   does not stare at a blank tile waiting for the next natural keyframe.
 - **The grid searches every column count** and keeps whichever yields the
   largest 16:9 tile, instead of a fixed `grid-cols-2`.
+- **RTP header extensions are stripped before forwarding.** Extension IDs are
+  negotiated per connection, so the publisher's IDs mean nothing on a
+  subscriber's connection. Forwarding them verbatim sends the publisher's MID,
+  and browsers demux by MID — video would land on the wrong transceiver and be
+  dropped silently. Each subscriber's interceptors add transport-wide CC with
+  that connection's own IDs.
+- **One accent colour, one meaning.** The UI is dark-only with a single lime
+  accent that always means "live": the primary action, the speaking ring and
+  the live indicator. Everything else stays quiet so video is the brightest
+  thing on screen.
 
 ---
 
@@ -100,17 +111,18 @@ backend/
     handler/             auth, room, signaling, health handlers
     middleware/          CORS allowlist, auth, rate limit, logging, recovery
     model/               User, Room
-    repository/          Mongo access + index management
+    repository/          Mongo access + index management (users, rooms, refresh sessions)
     service/             business logic (auth, rooms, meeting codes)
-    sfu/                 ★ the SFU: manager, room, peer, session, protocol
+    sfu/                 ★ the SFU: manager, room, peer, session, protocol, rate limits
     server/              http.Server lifecycle
 
 frontend/
   app/                   routes: landing, /room/[code]
   components/
     auth/                sign-in / sign-up panel
+    landing/             animated call preview on the home page
     meeting/             lobby, grid, tiles, control bar, panels
-    shared/              logo, avatar
+    shared/              logo, avatar, audio-level bars
   hooks/
     useMeeting.ts        ★ orchestrates signaling + RTC + media
     useGridLayout.ts     optimal tile packing
@@ -121,6 +133,8 @@ frontend/
     audio.ts             mic level + speaking detection
     devices.ts           enumeration, constraints, error mapping
   types/signaling.ts     mirror of the Go wire protocol
+
+Makefile                 setup, dev, test and build shortcuts (`make help`)
 ```
 
 ---
@@ -130,12 +144,27 @@ frontend/
 | Tool    | Version | Notes                                   |
 | ------- | ------- | --------------------------------------- |
 | Go      | 1.23+   | backend and SFU                         |
-| Node.js | 20+     | frontend                                |
+| Node.js | 20+     | frontend (22 recommended; pinned in `frontend/.nvmrc`) |
 | MongoDB | 6+      | users and rooms (Docker compose below)  |
 
 ---
 
 ## Quick start (development)
+
+### The short way
+
+```bash
+make setup   # installs Go + npm deps, creates backend/.env (with a random JWT_SECRET)
+             # and frontend/.env.local if they do not exist yet
+make dev     # starts MongoDB if nothing is on :27017, then backend :5000 + frontend :3000
+```
+
+Open **http://localhost:3000**. `Ctrl+C` stops both servers. The Makefile loads
+Node through [nvm](https://github.com/nvm-sh/nvm) when it is installed, so it
+works even in shells where `node` is not on `PATH`. Run `make help` for every
+target.
+
+The step-by-step version below does the same thing by hand.
 
 ### 1. Start MongoDB
 
@@ -211,7 +240,9 @@ reference).
 | `ALLOWED_ORIGINS`   | `http://localhost:3000`    | comma separated; gates **both** CORS and the WS handshake |
 | `STUN_URLS`         | Google STUN                | comma separated                                           |
 | `TURN_URL`          | —                          | see below — effectively required in production            |
-| `TURN_USERNAME`     | —                          |                                                           |
+| `TURN_SECRET`       | —                          | coturn `static-auth-secret`; **required in production** when `TURN_URL` is set |
+| `TURN_CREDENTIAL_TTL` | `6h`                     | lifetime of the per-user TURN credentials                 |
+| `TURN_USERNAME`     | —                          | static credentials, **local testing only** (ignored when `TURN_SECRET` is set) |
 | `TURN_PASSWORD`     | —                          |                                                           |
 | `PUBLIC_IP`         | —                          | set when behind 1:1 NAT (EC2/GCE/most cloud VMs)          |
 | `MAX_ROOM_SIZE`     | `25`                       | participants per room                                     |
@@ -236,7 +267,7 @@ openssl rand -base64 48
 
 ```bash
 cd backend
-go build -trimpath -ldflags="-s -w" -o bin/naitri ./cmd/server
+go build -trimpath -ldflags="-s -w" -o bin/naitri ./cmd/server   # or: make build
 
 ENV=production \
 PORT=5000 \
@@ -245,8 +276,7 @@ MONGO_URI='mongodb://user:pass@host:27017/?authSource=admin' \
 ALLOWED_ORIGINS='https://meet.example.com' \
 PUBLIC_IP='203.0.113.10' \
 TURN_URL='turn:turn.example.com:3478' \
-TURN_USERNAME='naitri' \
-TURN_PASSWORD='<turn-secret>' \
+TURN_SECRET='<same value as coturn static-auth-secret>' \
 ./bin/naitri
 ```
 
@@ -318,11 +348,20 @@ STUN alone fails for users behind symmetric NAT or strict corporate firewalls �
 in practice a meaningful share of real users. Run [coturn](https://github.com/coturn/coturn):
 
 ```bash
-turnserver -a -u naitri:<secret> -r naitri --no-tls --no-dtls \
-           --external-ip=<public-ip> --listening-port=3478
+turnserver --use-auth-secret --static-auth-secret=<secret> -r naitri \
+           --no-tls --no-dtls --external-ip=<public-ip> --listening-port=3478
 ```
 
-The server logs a warning on boot when `TURN_URL` is unset.
+Set the same `<secret>` as `TURN_SECRET`. Naitri then mints credentials per user
+in the standard TURN REST format (`username = <expiry>:<userId>`,
+`password = base64(HMAC-SHA1(secret, username))`), so a credential pulled out
+of a browser stops working after `TURN_CREDENTIAL_TTL` instead of turning your
+TURN server into a permanent open relay.
+
+Static `TURN_USERNAME` / `TURN_PASSWORD` still work for local testing, but every
+signed-in user receives them and they never expire, so the server **refuses to
+boot in production** with `TURN_URL` set and no `TURN_SECRET`. It logs a warning
+on boot when `TURN_URL` is unset, and another when static credentials are used.
 
 ### UDP ports
 
@@ -347,12 +386,34 @@ Base path `/api/v1`. Authenticated routes take `Authorization: Bearer <accessTok
 | ------ | ---------------- | ---- | ------------------------------------------- |
 | `POST` | `/auth/signup`   | —    | Create account, returns token pair          |
 | `POST` | `/auth/login`    | —    | Returns token pair                          |
-| `POST` | `/auth/refresh`  | —    | Exchange refresh token for a new pair       |
+| `POST` | `/auth/refresh`  | —    | Exchange refresh token for a new pair (rotates it) |
+| `POST` | `/auth/logout`   | —    | Revoke the login behind a refresh token (`204`) |
+| `POST` | `/auth/logout-all` | ✅ | Revoke every login the user holds (`204`)   |
 | `GET`  | `/auth/me`       | ✅   | Current user; used to validate a session    |
 | `POST` | `/rooms`         | ✅   | Create a meeting, returns the code          |
-| `GET`  | `/rooms`         | ✅   | Rooms you host                              |
+| `GET`  | `/rooms`         | ✅   | Rooms you host (shown as "recent rooms")    |
 | `GET`  | `/rooms/{code}`  | ✅   | Resolve a code + live occupancy             |
 | `GET`  | `/healthz`       | —    | Liveness + room/participant counts          |
+
+Auth routes are rate limited per client IP (20/min, burst 10).
+
+### Sessions and refresh tokens
+
+Access tokens are short-lived JWTs (`ACCESS_TOKEN_TTL`, 15 min). Refresh tokens
+are JWTs too, but each one is also recorded server-side in the
+`refresh_sessions` collection (expired records are removed by a TTL index), which
+is what makes them revocable:
+
+- **Single use, rotated.** `/auth/refresh` marks the token used and returns a new
+  pair in the same login "family".
+- **Reuse detection.** Presenting an already-used token more than 30 s after it
+  was rotated is treated as theft: the whole family is revoked and the caller
+  gets `401 invalid_refresh_token`.
+- **Multi-tab grace.** Within those 30 s the server answers
+  `409 refresh_superseded` instead, because two tabs refreshing at once is
+  normal. The client then picks up the pair the other tab stored.
+- **Logout** revokes the family server-side; **logout-all** revokes every family
+  for the user. Access tokens already issued stay valid until they expire.
 
 Errors are machine-readable so the client can branch on the code rather than
 match prose:
@@ -360,6 +421,9 @@ match prose:
 ```json
 { "error": "room_locked", "message": "this meeting is locked by the host" }
 ```
+
+Room errors: `room_not_found` (404), `room_ended` (410), `room_locked` (403),
+`removed_from_room` (403 — the host removed you), `not_host` (403).
 
 Meeting codes are `xxx-xxxx-xxx` drawn from a CSPRNG over an alphabet with no
 vowels or look-alike characters (`0/o`, `1/l/i`) — unambiguous when read aloud,
@@ -387,7 +451,7 @@ Every frame is `{ "type": "...", "payload": { ... } }`.
 | `state`             | mic / cam / screen / hand / speaking      |
 | `chat`              | Send a message                            |
 | `lock`              | Host only — lock the meeting              |
-| `remove-peer`       | Host only — remove a participant          |
+| `remove-peer`       | Host only — remove (and ban) a participant |
 | `ping`              | Heartbeat                                 |
 
 **Server → client**
@@ -407,17 +471,77 @@ Every frame is `{ "type": "...", "payload": { ... } }`.
 The Go types in `backend/internal/sfu/types.go` and the TypeScript types in
 `frontend/types/signaling.ts` are mirrors — change both together.
 
+### Limits
+
+Every socket is rate limited (`backend/internal/sfu/limits.go`):
+
+| Messages                              | Rate / burst | Over the limit                  |
+| ------------------------------------- | ------------ | ------------------------------- |
+| everything                            | 50/s, 200    | disconnected (`rate_limited`, fatal) |
+| `chat`                                | 2/s, 10      | message dropped, non-fatal error |
+| `state`                               | 10/s, 20     | dropped                         |
+| `publisher-offer`, `subscriber-answer`| 2/s, 10      | dropped                         |
+| `lock`, `remove-peer`                 | 2/s, 10      | dropped                         |
+
+Chat and presence are delivered "lossy": if a recipient's send queue is full the
+message is dropped for them rather than disconnecting them, so one person
+flooding a room cannot knock everyone else out.
+
+Per peer, the server also caps queued ICE candidates (64 per connection), the
+track-source map (32), media sections per offer (128) and simultaneously
+published tracks (8).
+
+### Removing someone
+
+`remove-peer` bans the **user**, not just the connection: all of their tabs are
+closed and the ban is stored on the room in MongoDB, so it survives the room
+emptying. Rejoining gets `403 removed_from_room` at the handshake. The host
+(including the host's other tabs) cannot be removed.
+
+---
+
+## Security
+
+What is in place:
+
+- **Passwords** — bcrypt (cost 12), with timing equalised for unknown emails.
+- **Tokens** — HS256 pinned, issuer checked, `kind` claim so a refresh token can
+  never be used as an access token. Refresh tokens are rotated, single-use and
+  revocable (see [Sessions and refresh tokens](#sessions-and-refresh-tokens)).
+- **Secrets** — the server refuses to boot in production without a
+  `JWT_SECRET` of at least 32 bytes, or with `TURN_URL` but no `TURN_SECRET`.
+- **WebSocket** — authenticated and authorised (room exists, not locked, not
+  banned) *before* the upgrade; origin allowlist via `ALLOWED_ORIGINS`.
+- **Abuse limits** — HTTP auth rate limiting, per-socket signaling rate limits,
+  bounded per-peer state (see [Limits](#limits)).
+- **Media** — DTLS-SRTP on every leg; TURN credentials are per-user and expire.
+
+Known gaps worth closing before a public deployment:
+
+- The auth rate limiter keys on the TCP peer address. Behind a reverse proxy
+  every user shares the proxy's IP, so add trusted `X-Forwarded-For` handling.
+- Tokens are stored in `localStorage`; an httpOnly refresh cookie would shrink
+  the blast radius of any future XSS.
+- The access token travels in the WebSocket URL; make sure your proxy does not
+  log query strings.
+- Never set `ALLOWED_ORIGINS=*` in production.
+- No security headers (CSP, HSTS, frame-ancestors) are set yet.
+
 ---
 
 ## Testing
 
 ```bash
-# Backend: unit + end-to-end SFU tests, race detector on
-cd backend && go test -race ./...
-
-# Frontend: type check and production build
-cd frontend && npx tsc --noEmit && npm run build
+make test               # all of the below
+make test-backend       # go vet + unit and end-to-end SFU tests, race detector on
+make test-integration   # tests that need MongoDB (refresh rotation, logout, bans)
+make test-frontend      # TypeScript type check + ESLint
+make build              # production builds of both halves
 ```
+
+The MongoDB-backed tests run only when `MONGO_TEST_URI` is set (the Makefile sets
+it to `mongodb://127.0.0.1:27017`). Each run uses a throwaway `naitri_test_*`
+database and drops it afterwards.
 
 The SFU suite (`internal/sfu/sfu_test.go`) stands up a real server and connects
 **two Pion clients** over actual peer connections. It asserts that media
@@ -425,6 +549,14 @@ published by one peer is received by the other and that RTP payload genuinely
 flows — not merely that SDP was exchanged. It also covers late joiners
 subscribing to existing tracks, room capacity limits, chat broadcast and
 departure notifications.
+
+`internal/sfu/security_test.go` covers the abuse limits end to end: a client
+flooding chat is disconnected without affecting anyone else, a removed user
+cannot rejoin, the host cannot be removed, TURN credentials are time-limited and
+static ones are never handed out when a secret is set.
+`internal/sfu/forward_ext_test.go` guards the header-extension stripping
+described above — Pion test clients do not demux by MID the way browsers do, so
+without it this bug is invisible to the rest of the suite.
 
 `internal/middleware/observability_test.go` guards two regressions that are
 invisible at the unit level and break the whole app in a browser: a response
@@ -434,6 +566,31 @@ preflights falling through to the 404 handler.
 ---
 
 ## Troubleshooting
+
+**Backend exits with `room indexes: ... E11000 duplicate key ... { code: null }`**
+The `rooms` collection holds documents from an older schema with no `code`
+field, so the unique index cannot be built. Back them up and remove them:
+
+```bash
+mongosh naitri --eval 'printjson(db.rooms.find({code: {$exists: false}}).toArray())' > legacy-rooms.json
+mongosh naitri --eval 'printjson(db.rooms.deleteMany({code: {$exists: false}}))'
+```
+
+**Backend exits with `JWT_SECRET is required` / `TURN_SECRET is required`**
+You are running with `ENV=production`. Set the variable (see
+[Configuration](#configuration)); the key is `JWT_SECRET` with an underscore.
+
+**`listen tcp :5000: bind: address already in use`**
+Another backend is already running — often a previous `make dev`. Stop it, or
+set `PORT`.
+
+**Everyone was signed out after upgrading**
+Expected once: refresh tokens issued before server-side sessions existed cannot
+be revoked, so they are no longer accepted.
+
+**`node: command not found` in scripts**
+Node is installed through nvm, which only loads in interactive shells. Use the
+Makefile targets, or run `source ~/.nvm/nvm.sh && nvm use` first.
 
 **WebSocket handshake fails with 401**
 The access token expired or is missing. The client refreshes before dialling;
@@ -454,7 +611,15 @@ claimed by another app, or the page is not on a secure origin.
 
 **Tiles stay black with video seemingly connected**
 Usually a missing keyframe. The SFU requests one every 2s; if it persists,
-check for packet loss on the publisher's uplink.
+check for packet loss on the publisher's uplink. In
+`chrome://webrtc-internals`, an `inbound-rtp` video entry with packets but no
+decoded frames points at keyframes; no `inbound-rtp` video entry at all means
+packets are not reaching the transceiver (see the header-extension note in
+[How it works](#how-it-works)).
+
+**"You were removed from this meeting" when joining**
+The host removed this account earlier. Bans are per room and stored in MongoDB
+(`bannedUserIds` on the room document).
 
 ---
 
