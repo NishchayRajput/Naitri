@@ -4,10 +4,23 @@
 > **selective forwarding unit (SFU)** built on [Pion](https://github.com/pion/webrtc)
 > so each participant uploads one stream no matter how many people are in the room.
 
+## Demo
+
+[![Watch the Naitri demo](docs/demo/naitri-demo-poster.jpg)](docs/demo/naitri-demo.mp4)
+
+A 1:28 narrated walkthrough: signing in, the pre-join lobby, a four-person
+call with speaking indicators, chat, raised hands, screen sharing, the shared
+whiteboard and host controls. Click the image to play
+([`docs/demo/naitri-demo.mp4`](docs/demo/naitri-demo.mp4)).
+
+<sub>Recorded from the real app with four browsers in one meeting. The
+participants' camera feeds are stylised placeholders.</sub>
+
 ---
 
 ## Contents
 
+- [Demo](#demo)
 - [How it works](#how-it-works)
 - [Project layout](#project-layout)
 - [Prerequisites](#prerequisites)
